@@ -87,9 +87,11 @@
   <div class="view hidden" id="view-teams">
     <section class="card">
       <h2>Which seller columns does each team use?</h2>
+      <p class="muted">These are the SALES LEADER values found in the responses on the response sheet (<span id="teams-sheet">MARF RAW</span>),
+        with how many responses name each one. Other sheets in the workbook are not used.</p>
       <p class="muted">Records are exported only for teams with a seller-column assignment. Leave a team <b>Unresolved</b> to keep its records in review.
         An assignment made here is <b>your owner-approved assumption, not a verified mapping</b>: every exported record is flagged and the audit records your name and today's date.</p>
-      <table><thead><tr><th>SALES LEADER</th><th class="num">Records</th><th>Current status</th><th>Seller columns</th></tr></thead><tbody id="teams"></tbody></table>
+      <table><thead><tr><th>SALES LEADER (from the responses)</th><th class="num">Responses</th><th>Current status</th><th>Seller columns</th></tr></thead><tbody id="teams"></tbody></table>
       <div class="approver"><label>Approved by <input id="approved-by" placeholder="Your name (required for any assignment)"></label></div>
       <div class="actions"><button class="btn primary" id="btn-apply">Apply and re-check</button><button class="link" id="btn-clear-teams">Reset all to Unresolved</button></div>
     </section>

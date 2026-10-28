@@ -277,6 +277,7 @@ function renderTeams() {
   const tb = $("#teams");
   tb.replaceChildren();
   $("#approved-by").value = $("#approved-by").value || store.get("fuel.approvedBy", "");
+  $("#teams-sheet").textContent = state.result.sheet;
   for (const t of state.result.leaders) {
     const locked = t.status === "VERIFIED";
     const sel = el("select", { "data-key": t.key });
