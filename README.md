@@ -96,10 +96,20 @@ Synthetic fixtures only. To also run the golden checks against the real export, 
 FUEL_GOLDEN_SOURCE="/path/FUEL RESP (CSP-AD MARF) v3.3.xlsx" FUEL_GOLDEN_TEMPLATE="/path/FUEL (MGM-AD ADMIN) (2).xlsx" .venv/bin/pytest
 ```
 
-## Vercel
+## Browser app (no install)
 
-The Vercel project deploys only a static information page (`api/index.py`, `vercel.json`). It accepts no files and runs
-no parsing: all processing stays on your computer.
+Open the Vercel site (e.g. https://fuelparser.vercel.app). It runs the same parser **inside your browser**: files are read on your
+computer and never uploaded.
+
+1. Drop the response export and the `FUEL (MGM-AD ADMIN)` template (and optionally the reviewed seller directory CSV).
+2. **Check files.** See the counts, reconciliation and issues.
+3. **Team seller columns.** Choose G/H, I/J or K/L for a team, or leave it *Unresolved* (records stay in review). Your name and
+   today's date are recorded, and exported records are flagged as owner-approved, not verified.
+4. **Export.** Enter the last Id in the live MASTERLIST and download the import file, the audit & review workbook and, optionally,
+   the Leads Log.
+
+The import history is stored in that browser only. Use the same browser for every export so records are never exported twice.
+To run the browser app locally instead: `python scripts/serve_web.py`, then open http://localhost:8000.
 
 ## Privacy
 

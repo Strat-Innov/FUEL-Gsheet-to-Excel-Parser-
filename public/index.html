@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'wasm-unsafe-eval'; worker-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; form-action 'none'; base-uri 'none'">
+<title>FUEL Response Parser</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="sidebar">
+  <div class="brand">
+    <div class="brand-title">FUEL Response Parser</div>
+    <div class="brand-sub">MARF responses → MASTERLIST</div>
+  </div>
+  <div class="nav-section">PARSER</div>
+  <nav>
+    <button class="nav-item active" data-view="import"><svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>Import files</button>
+    <button class="nav-item" data-view="summary" disabled><svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"/></svg>Check results</button>
+    <button class="nav-item" data-view="teams" disabled><svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8m13 10v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></svg>Team seller columns</button>
+    <button class="nav-item" data-view="review" disabled><svg viewBox="0 0 24 24"><path d="M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Review</button>
+    <button class="nav-item" data-view="export" disabled><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 5-5m-5 5-5-5M5 21h14"/></svg>Export</button>
+  </nav>
+  <div class="nav-section">RECORDS</div>
+  <nav>
+    <button class="nav-item" data-view="history"><svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8m0-5v5h5m4-1v5l3 2"/></svg>Import history</button>
+  </nav>
+  <div class="engine" id="engine"><span class="dot"></span><span id="engine-text">Loading parser engine…</span></div>
+</aside>
+
+<main>
+  <section class="card header-card">
+    <h1 id="view-title">Import files</h1>
+    <p class="privacy"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="m9 12 2 2 4-4"/></svg>
+      Read in this browser only — files are never uploaded. Only the import history (fingerprints, no client data) is kept in this browser.</p>
+  </section>
+
+  <div id="alert" class="alert hidden"></div>
+
+  <!-- Import -->
+  <div class="view" id="view-import">
+    <label class="dropzone" id="dropzone">
+      <input type="file" id="file-input" accept=".xlsx,.csv" multiple hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+      <strong>Drop the response export and the MASTERLIST template here</strong>
+      <span>or click to browse · several files at once · .xlsx or .csv · optional reviewed seller directory (.csv)</span>
+    </label>
+    <section class="card" id="files-card">
+      <h2>Files</h2>
+      <div class="file-row" data-role="source"><span class="role">Response export</span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
+      <div class="file-row" data-role="template"><span class="role">MASTERLIST template</span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
+      <div class="file-row" data-role="sellers"><span class="role">Seller directory <em>(optional)</em></span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
+      <details class="options">
+        <summary>Advanced options</summary>
+        <label>Response sheet name <input id="opt-sheet" placeholder="Detected automatically (MARF RAW)"></label>
+        <label>CSV timestamp format <input id="opt-tsfmt" placeholder="e.g. %m/%d/%Y %H:%M:%S (only for ambiguous CSV dates)"></label>
+      </details>
+      <div class="actions"><button class="btn primary" id="btn-check" disabled>Check files</button><span class="hint" id="check-hint">Add the response export and the template.</span></div>
+    </section>
+  </div>
+
+  <!-- Summary -->
+  <div class="view hidden" id="view-summary">
+    <section class="metrics" id="metrics"></section>
+    <section class="card"><h2>Reconciliation</h2><ul class="checks" id="checks"></ul><p class="muted" id="headline"></p></section>
+    <section class="card"><h2>Issues</h2><table><thead><tr><th>Code</th><th>Severity</th><th class="num">Count</th><th>What to do</th></tr></thead><tbody id="issues"></tbody></table></section>
+  </div>
+
+  <!-- Teams -->
+  <div class="view hidden" id="view-teams">
+    <section class="card">
+      <h2>Which seller columns does each team use?</h2>
+      <p class="muted">Records are exported only for teams with a seller-column assignment. Leave a team <b>Unresolved</b> to keep its records in review.
+        An assignment made here is <b>your owner-approved assumption, not a verified mapping</b>: every exported record is flagged and the audit records your name and today's date.</p>
+      <table><thead><tr><th>SALES LEADER</th><th class="num">Records</th><th>Current status</th><th>Seller columns</th></tr></thead><tbody id="teams"></tbody></table>
+      <div class="approver"><label>Approved by <input id="approved-by" placeholder="Your name (required for any assignment)"></label></div>
+      <div class="actions"><button class="btn primary" id="btn-apply">Apply and re-check</button><button class="link" id="btn-clear-teams">Reset all to Unresolved</button></div>
+    </section>
+  </div>
+
+  <!-- Review -->
+  <div class="view hidden" id="view-review">
+    <section class="card">
+      <h2>Records needing attention <span class="muted" id="review-count"></span></h2>
+      <p class="muted">Held records are not in the import file. Records with warnings are exported and listed here too. The full list with every field is in the audit workbook.</p>
+      <div class="filter"><input id="review-filter" placeholder="Filter by reason, team or lead source"></div>
+      <div class="table-wrap"><table><thead><tr><th class="num">Row</th><th>Status</th><th>Reasons</th><th>SALES LEADER</th><th>Lead source</th></tr></thead><tbody id="review"></tbody></table></div>
+    </section>
+  </div>
+
+  <!-- Export -->
+  <div class="view hidden" id="view-export">
+    <section class="card">
+      <h2>Create the import file</h2>
+      <p id="export-ready" class="muted"></p>
+      <label class="inline">Last Id in the live MASTERLIST <input type="number" id="last-id" min="0" step="1" value="0"></label>
+      <label class="inline check"><input type="checkbox" id="leads-log"> Also create the 17-column Leads Log</label>
+      <div class="actions"><button class="btn primary" id="btn-export">Create import file</button></div>
+      <p class="muted small">The live MASTERLIST is never changed: append the import file yourself. Exported records are remembered in this browser so they are never exported twice.</p>
+    </section>
+    <section class="card hidden" id="downloads"><h2>Downloads</h2><div id="download-list" class="download-list"></div></section>
+  </div>
+
+  <!-- History -->
+  <div class="view hidden" id="view-history">
+    <section class="card">
+      <h2>Import history in this browser</h2>
+      <p class="muted">If you did not append a batch to the live MASTERLIST, void it so its records can be exported again.</p>
+      <table><thead><tr><th>Batch</th><th>Created</th><th>Status</th><th class="num">Exported</th><th>Source file</th><th></th></tr></thead><tbody id="history"></tbody></table>
+    </section>
+  </div>
+</main>
+
+<div class="busy hidden" id="busy"><div class="spinner"></div><div id="busy-text">Working…</div></div>
+<script src="app.js"></script>
+</body>
+</html>
