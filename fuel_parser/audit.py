@@ -84,14 +84,22 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
         ["Mode", "DRY RUN (no import file, ledger unchanged)" if result.dry_run else "EXPORT"],
         ["Batch id", result.batch_id],
         ["Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
-        ["Source file", Path(opts.source).name],
-        ["Source sha256", result.source_sha256],
-        ["Response sheet used", result.sheet.sheet_name],
-        ["Other sheets ignored", ", ".join(result.sheet.ignored_sheets) or "(none)"],
-        ["Template file", Path(opts.template).name],
-        ["Template sha256", file_sha256(opts.template)],
+        ["Source files", len(result.sources)],
+    ]
+    for n, f in enumerate(result.sources, start=1):
+        tag = f" {n}" if len(result.sources) > 1 else ""
+        lines += [
+            [f"Source file{tag}", f.name],
+            [f"Source sha256{tag}", f.sha256],
+            [f"Response sheet used{tag}", f"{f.sheet.sheet_name} ({len(f.sheet.rows)} responses)"],
+            [f"Other sheets ignored{tag}", ", ".join(f.sheet.ignored_sheets) or "(none)"],
+        ]
+    lines += [
+        ["MASTERLIST layout", "Built-in 35-column layout" if result.layout.origin == "built-in" else
+         f"Template {result.layout.origin}" + (" (columns re-arranged; output follows the template)" if result.layout.reordered else "")],
+        ["Template sha256", file_sha256(opts.template) if opts.template else "(none: built-in layout)"],
         ["Mapping profile sha256", cfg.profile.sha256],
-        ["Header signature", result.cmap.signature],
+        ["Header signature(s)", ", ".join(f.cmap.signature for f in result.sources)],
         ["Vocabulary sha256", cfg.vocab.sha256],
         ["Validation policy sha256", cfg.policy.sha256],
         ["Teams config sha256", cfg.teams.sha256],
@@ -129,9 +137,10 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
         _append(ms, row)
 
     dest_fields = [f for f in cfg.profile.dest_columns if not f.startswith("seller_") and f != "id"]
-    rv = _sheet(wb, "Review", ["Status", "Reasons", "Action", "Source row", "Block", "SALES LEADER", "Slot status",
+    first_name = result.sources[0].name
+    rv = _sheet(wb, "Review", ["Status", "Reasons", "Action", "Source file", "Source row", "Block", "SALES LEADER", "Slot status",
                                "Seller name", "Seller e-mail", "Lead source (received)", "Duplicate group"] + dest_fields)
-    for rec in sorted(result.records, key=lambda r: (r.source_row, r.block_index or 0)):
+    for rec in sorted(result.records, key=lambda r: (r.source_file, r.source_row, r.block_index or 0)):
         flagged = [i for i in rec.issues if i.severity in _REVIEW_SEVERITIES]
         if rec.status == RecordStatus.EXPORTED and not flagged:
             continue
@@ -139,37 +148,42 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
             continue
         codes = list(dict.fromkeys(f"{i.code}" + (f"[{i.field}]" if i.field else "") for i in flagged))
         actions = list(dict.fromkeys(cfg.policy.action.get(i.code, "") for i in flagged if cfg.policy.action.get(i.code)))
-        _append(rv, [rec.status.value, "; ".join(codes), " ".join(actions), rec.source_row, rec.block_index,
+        _append(rv, [rec.status.value, "; ".join(codes), " ".join(actions), rec.source_file or first_name, rec.source_row, rec.block_index,
                      rec.sales_leader, rec.slot_status, rec.meta.get("seller_name"), rec.meta.get("seller_email"),
                      rec.lead_source_original, rec.duplicate_group] + [rec.values.get(f) for f in dest_fields])
     for i in result.response_issues:
-        _append(rv, ["REVIEW", i.code, cfg.policy.action.get(i.code, ""), i.source_row, None, None, None, None, None, None, None])
+        _append(rv, ["REVIEW", i.code, cfg.policy.action.get(i.code, ""), i.source_file or first_name, i.source_row,
+                     None, None, None, None, None, None, None])
 
-    iss = _sheet(wb, "Issues", ["Source row", "Block", "Record key", "Code", "Severity", "Field", "Message"])
+    iss = _sheet(wb, "Issues", ["Source file", "Source row", "Block", "Record key", "Code", "Severity", "Field", "Message"])
     for rec in result.records:
         for i in rec.issues:
-            _append(iss, [rec.source_row, rec.block_index, rec.src_key[:12], i.code, i.severity.value, i.field, i.message])
+            _append(iss, [rec.source_file or first_name, rec.source_row, rec.block_index, rec.src_key[:12], i.code,
+                          i.severity.value, i.field, i.message])
     for i in result.response_issues:
-        _append(iss, [i.source_row, None, "", i.code, i.severity.value, i.field, i.message])
+        _append(iss, [i.source_file or first_name, i.source_row, None, "", i.code, i.severity.value, i.field, i.message])
 
-    rl = _sheet(wb, "RowLog", ["Source row", "Block", "Status", "Output Id", "Record key", "Lead source (received)", "Issue codes"])
-    entries = [(r.source_row, r.block_index or 0, [r.source_row, r.block_index, r.status.value, r.dest_id, r.src_key,
-                r.lead_source_original, ", ".join(dict.fromkeys(r.codes()))]) for r in result.records]
-    entries += [(i.source_row, 0, [i.source_row, None, "REVIEW", None, "", "", i.code]) for i in result.response_issues]
-    for _, _, row in sorted(entries, key=lambda e: (e[0], e[1])):
+    rl = _sheet(wb, "RowLog", ["Source file", "Source row", "Block", "Status", "Output Id", "Record key", "Lead source (received)", "Issue codes"])
+    entries = [((r.source_file, r.source_row, r.block_index or 0), [r.source_file or first_name, r.source_row, r.block_index,
+                r.status.value, r.dest_id, r.src_key, r.lead_source_original, ", ".join(dict.fromkeys(r.codes()))])
+               for r in result.records]
+    entries += [((i.source_file, i.source_row, 0), [i.source_file or first_name, i.source_row, None, "REVIEW", None, "", "", i.code])
+                for i in result.response_issues]
+    for _, row in sorted(entries, key=lambda e: e[0]):
         _append(rl, row)
 
-    mp = _sheet(wb, "Mapping", ["Column", "Source header", "Result", "Target", "Note"])
-    for p in result.cmap.preview:
-        _append(mp, [p.letter, p.header, p.kind, p.target, p.note])
+    mp = _sheet(wb, "Mapping", ["Source file", "Column", "Source header", "Result", "Target", "Note"])
+    um = _sheet(wb, "Unmapped", ["Source file", "Column", "Source header", "Note"])
+    for f in result.sources:
+        for p in f.cmap.preview:
+            _append(mp, [f.name, p.letter, p.header, p.kind, p.target, p.note])
+            if p.kind in ("IGNORED_EMPTY",) or p.target == "ignore":
+                _append(um, [f.name, p.letter, p.header, p.note])
 
-    um = _sheet(wb, "Unmapped", ["Column", "Source header", "Note"])
-    for p in result.cmap.preview:
-        if p.kind in ("IGNORED_EMPTY",) or p.target == "ignore":
-            _append(um, [p.letter, p.header, p.note])
-
-    if opts.team_sheet_check and result.sheet.path.suffix.lower() in (".xlsx", ".xlsm"):
-        team_sheet_check(wb, result)  # opt-in reference comparison; never an input (H-33)
+    if opts.team_sheet_check:
+        for f in result.sources:
+            if f.path.suffix.lower() in (".xlsx", ".xlsm"):
+                team_sheet_check(wb, result, f)  # opt-in reference comparison; never an input (H-33)
     wb.save(path)
 
 
@@ -210,16 +224,17 @@ def _ts_key(v: object) -> int | None:
     return round(v.timestamp()) if isinstance(v, datetime) else None
 
 
-def team_sheet_check(wb, result: "RunResult") -> None:
+def team_sheet_check(wb, result: "RunResult", source) -> None:
     """Compare our records with the team sheets' cached values (reference only, case-insensitive).
 
     SPECIFIC / DISTINCT are excluded (I.5 X7). Values are not copied into the report.
     """
-    src = openpyxl.load_workbook(result.sheet.path, read_only=True, data_only=True)
+    multi = len(result.sources) > 1
+    src = openpyxl.load_workbook(source.path, read_only=True, data_only=True)
     try:
         sheets = []
         for name in src.sheetnames:
-            if name == result.sheet.sheet_name:
+            if name == source.sheet.sheet_name:
                 continue
             rows = list(src[name].iter_rows(max_row=10, values_only=True))
             for idx, row in enumerate(rows):
@@ -231,6 +246,8 @@ def team_sheet_check(wb, result: "RunResult") -> None:
             return
         ours: dict[tuple, list] = defaultdict(list)
         for rec in result.records:
+            if multi and rec.source_file != source.name:
+                continue
             k = (_ts_key(rec.timestamp), _norm(rec.values.get("surname"), "", set()))
             ours[k].append(rec)
         nulls = result.cfg.vocab.null_tokens
@@ -264,12 +281,12 @@ def team_sheet_check(wb, result: "RunResult") -> None:
                     else:
                         stats[header]["mismatch"] += 1
                         mismatches.append([name, n, rec.source_row, header])
-        ws = _sheet(wb, "TeamSheetCheck", ["Field (reference: team sheets, case-insensitive)", "Matched", "Mismatched"])
+        ws = _sheet(wb, "TeamSheetCheck" + (f" {result.sources.index(source) + 1}" if multi else ""), ["Field (reference: team sheets, case-insensitive)", "Matched", "Mismatched"])
         _append(ws, ["Team-sheet rows compared", compared, None])
         _append(ws, ["Team-sheet rows with no matching record", unmatched, None])
         for header in _TEAM_FIELDS:
             _append(ws, [header, stats[header]["match"], stats[header]["mismatch"]])
-        ws2 = _sheet(wb, "TeamSheetMismatches", ["Team sheet", "Team-sheet row", "Source row", "Field"])
+        ws2 = _sheet(wb, "TeamSheetMismatches" + (f" {result.sources.index(source) + 1}" if multi else ""), ["Team sheet", "Team-sheet row", "Source row", "Field"])
         for m in mismatches:
             _append(ws2, m)
     finally:

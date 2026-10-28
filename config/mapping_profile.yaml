@@ -103,6 +103,44 @@ destination:
     - sponsorship
     - awareness
     - seller_fb_page
+  # Built-in MASTERLIST layout (H-34): exact header text (NBSP and newlines included), field and width.
+  # Used when no template file is supplied. A supplied template may arrange these same 35 headers in any order.
+  template:
+    - {field: id, width: 5.14, header: "Id"}
+    - {field: start_time, width: 17.0, header: "Start time"}
+    - {field: completion_time, width: 18.57, header: "Completion time"}
+    - {field: email, width: 11.29, header: "Email"}
+    - {field: name, width: 8.71, header: "Name"}
+    - {field: sales_leader, width: 32.0, header: "SALES LEADER"}
+    - {field: seller_name_1, width: 15.86, header: "Seller Name"}
+    - {field: seller_email_1, width: 23.0, header: "Seller's Email Address"}
+    - {field: seller_name_2, width: 15.29, header: "Seller Name1"}
+    - {field: seller_email_2, width: 24.29, header: "Seller's Email Address1"}
+    - {field: seller_name_3, width: 15.29, header: "Seller Name2"}
+    - {field: seller_email_3, width: 24.29, header: "Seller's Email Address2"}
+    - {field: surname, width: 18.57, header: "Client's Surname"}
+    - {field: first_name, width: 20.29, header: "Client's First Name"}
+    - {field: middle_name, width: 23.29, header: "Client's Middle Name\u00a0"}
+    - {field: mobile, width: 20.57, header: "Client's Mobile No.\n"}
+    - {field: client_email, width: 24.14, header: "Client's Email Address"}
+    - {field: residence, width: 29.29, header: "Client's Residence Address"}
+    - {field: project_first, width: 32.29, header: "Project of Interest (First Choice)"}
+    - {field: project_second, width: 34.86, header: "Project of Interest (Second Choice)"}
+    - {field: remarks, width: 12.29, header: "REMARKS"}
+    - {field: lead_source, width: 26.57, header: "Lead Source"}
+    - {field: booth, width: 51.71, header: "If\u00a0Booth, please choose which\u00a0Booth Location\u00a0below:\n"}
+    - {field: referrer, width: 52.29, header: "Name of\u00a0existing buyer who referred\u00a0the client to you\n\n"}
+    - {field: question, width: 11.57, header: "Question"}
+    - {field: digital_official, width: 52.0, header: "If Digital -\u00a0Official Social Media, please choose below:\n"}
+    - {field: digital_seller, width: 50.71, header: "If Digital -\u00a0Seller Social Media, please choose below:"}
+    - {field: own_source, width: 36.86, header: "If\u00a0Own Source, please choose below:\n"}
+    - {field: repeat_buyer, width: 59.86, header: "If\u00a0Repeat Buyer, please choose from the listed projects below:\n"}
+    - {field: roadshow, width: 117.57, header: "If\u00a0Roadshow, please specify below the\u00a0name and date\u00a0of roadshow event\u00a0(e.g. Filinvest Alabang Roadshow - January 1, 2026)"}
+    - {field: saturation, width: 47.86, header: "If\u00a0Saturation, please specify\u00a0exact location\u00a0below\n"}
+    - {field: showroom, width: 12.57, header: "Question1"}
+    - {field: sponsorship, width: 116.57, header: "If\u00a0Sponsorship Event, please specify below the\u00a0name and date\u00a0of event\u00a0(e.g. Cardiologist Conference 2026 - January 1, 2026)\n\n"}
+    - {field: awareness, width: 126.57, header: "Source of Awareness\nCLIENT'S PERSPECTIVE:\u00a0please choose the applicable source of awareness below\u00a0(you may choose more than one)\n"}
+    - {field: seller_fb_page, width: 44.43, header: "\nIf Digital -\u00a0Seller Facebook Page,\u00a0please choose below:"}
   datetime_columns: [start_time, completion_time]
   datetime_format: "m/d/yy h:mm"
 

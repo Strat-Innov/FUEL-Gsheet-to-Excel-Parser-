@@ -328,7 +328,7 @@ def test_T38_single_response_sheet_used_automatically_others_ignored(env):
     r = env.run(src)
     assert r.sheet.sheet_name == "Form Responses 1" and r.sheet.ignored_sheets == ["TEAM ALPHA", "Notes"]
     summary = dict(row[:2] for row in openpyxl.load_workbook(r.outputs["audit"])["Summary"].iter_rows(values_only=True))
-    assert summary["Response sheet used"] == "Form Responses 1" and summary["Other sheets ignored"] == "TEAM ALPHA, Notes"
+    assert summary["Response sheet used"] == "Form Responses 1 (1 responses)" and summary["Other sheets ignored"] == "TEAM ALPHA, Notes"
 
 
 def test_marf_raw_preferred_over_other_response_like_sheets(env):
@@ -451,8 +451,9 @@ def test_audit_accounts_for_every_row(env):
     rows = [response(), response(block=0, ts=datetime(2026, 6, 2)), response(ts=datetime(2026, 6, 3), surname="X", leader="TEAM GAMMA (AAD: Q)")]
     r = env.run(env.source(rows))
     rowlog = list(openpyxl.load_workbook(r.outputs["audit"])["RowLog"].iter_rows(min_row=2, values_only=True))
-    assert sorted(x[0] for x in rowlog) == [2, 3, 4] and balanced(r)
-    statuses = {x[0]: x[2] for x in rowlog}
+    assert sorted(x[1] for x in rowlog) == [2, 3, 4] and balanced(r)
+    assert {x[0] for x in rowlog} == {"source.xlsx"}
+    statuses = {x[1]: x[3] for x in rowlog}
     assert statuses == {2: "EXPORTED", 3: "REVIEW", 4: "REVIEW"}
 
 
@@ -474,3 +475,87 @@ def test_template_found_by_header_when_sheet_is_renamed(env):
     r = env.run(env.source([response()]), template=p)
     out = openpyxl.load_workbook(r.outputs["import"])
     assert out.sheetnames == ["MASTERLIST"] and [c.value for c in out["MASTERLIST"][1]] == TEMPLATE_HEADERS
+
+
+# -- H-34: built-in MASTERLIST layout, re-arranged templates ------------------------------------
+
+def test_builtin_layout_when_no_template(env):
+    r = env.run(env.source([response()]), template=None)
+    ws = openpyxl.load_workbook(r.outputs["import"])["MASTERLIST"]
+    assert [c.value for c in ws[1]] == TEMPLATE_HEADERS  # byte-exact without any template file
+    assert ws.column_dimensions["M"].width == pytest.approx(18.57, abs=0.01)
+    assert ws.cell(2, 13).value == "Testsurname" and ws.cell(2, 16).value == "09000000001"
+
+
+def test_rearranged_template_drives_column_order(env):
+    order = list(reversed(TEMPLATE_HEADERS))
+    wb = openpyxl.Workbook()
+    wb.active.title = "Layout v2"
+    wb.active.append(order)
+    p = env.root / "rearranged.xlsx"
+    wb.save(p)
+    r = env.run(env.source([response()]), template=p)
+    ws = openpyxl.load_workbook(r.outputs["import"])["MASTERLIST"]
+    header = [c.value for c in ws[1]]
+    assert header == order
+    row = {h: c.value for h, c in zip(header, ws[2])}
+    assert row["Client's Surname"] == "Testsurname" and row["Id"] == 101 and row["Client's Mobile No.\n"] == "09000000001"
+    assert r.layout.reordered and "Layout v2" in r.layout.origin
+
+
+def test_template_with_missing_header_is_refused(env):
+    wb = openpyxl.Workbook()
+    wb.active.append(TEMPLATE_HEADERS[:-1])
+    p = env.root / "short.xlsx"
+    wb.save(p)
+    with pytest.raises(TemplateError, match="missing 1 header"):
+        env.run(env.source([response()]), template=p)
+
+
+# -- H-35: bulk import of several response exports ----------------------------------------------
+
+def test_bulk_import_combines_files(env):
+    a = env.source([response(surname="Alpha1"), response(ts=datetime(2026, 6, 2), surname="Alpha2")], name="team_a.xlsx")
+    b = env.source([response(ts=datetime(2026, 7, 1), surname="Beta1", leader="TEAM BETA (AAD: Z)")], name="team_b.xlsx",
+                   sheet="Form Responses 1")
+    r = env.run([a, b], template=None)
+    assert r.counts["source_files"] == 2 and r.counts["responses"] == 3 and r.counts["records_exported"] == 3 and balanced(r)
+    assert [row[0] for row in import_rows(r)] == [101, 102, 103]
+    rowlog = list(openpyxl.load_workbook(r.outputs["audit"])["RowLog"].iter_rows(min_row=2, values_only=True))
+    assert sorted((x[0], x[1]) for x in rowlog) == [("team_a.xlsx", 2), ("team_a.xlsx", 3), ("team_b.xlsx", 2)]
+    summary = dict(row[:2] for row in openpyxl.load_workbook(r.outputs["audit"])["Summary"].iter_rows(values_only=True))
+    assert summary["Source file 2"] == "team_b.xlsx" and summary["Response sheet used 2"].startswith("Form Responses 1")
+    # Re-running one of the files: nothing new, and the earlier bulk batch is reported.
+    again = env.run(b, template=None)
+    assert again.counts["records_already_imported"] == 1 and again.previous_batches
+
+
+def test_bulk_overlapping_exports_hold_the_repeated_response(env):
+    rows = [response(surname="Same"), response(ts=datetime(2026, 6, 5), surname="Other")]
+    older = env.source(rows[:1], name="v3.2.xlsx")
+    newer = env.source(rows, name="v3.3.xlsx")
+    r = env.run([older, newer], template=None)
+    held = [x for x in r.records if x.status == RecordStatus.DUPLICATE_HELD]
+    assert r.counts["records_exported"] == 2 and len(held) == 1
+    assert "Same response as" in next(i.message for i in held[0].issues if i.code == "PROBABLE_DUPLICATE")
+    assert not any("POSSIBLE_DUPLICATE_CLIENT" in codes(x) for x in r.records)
+    assert balanced(r)
+
+
+def test_same_file_added_twice_is_refused(env):
+    src = env.source([response()])
+    with pytest.raises(ValueError, match="added twice"):
+        env.run([src, src], template=None)
+
+
+def test_no_output_left_behind_when_a_later_write_fails(env, monkeypatch):
+    from fuel_parser import audit
+    from fuel_parser.history import Ledger
+
+    def boom(*a, **k):
+        raise RuntimeError("disk full")
+    monkeypatch.setattr(audit, "write_audit", boom)
+    with pytest.raises(RuntimeError):
+        env.run(env.source([response()]))
+    assert not list(env.out.glob("FUEL_*"))  # import file removed: nothing un-ledgered remains
+    assert Ledger(env.ledger).imported_keys() == set()

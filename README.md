@@ -23,11 +23,11 @@ On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\fuel-parser` instead of `
 1. Put your exports somewhere outside the repository folder, or in `output/` (git-ignored).
 2. Check the mapping:
    ```bash
-   .venv/bin/fuel-parser preview --source "FUEL RESP (CSP-AD MARF) v3.3.xlsx" --template "FUEL (MGM-AD ADMIN) (2).xlsx"
+   .venv/bin/fuel-parser preview --source "FUEL RESP (CSP-AD MARF) v3.3.xlsx"
    ```
 3. Validate without exporting (writes only an audit file to `output/`):
    ```bash
-   .venv/bin/fuel-parser run --source "FUEL RESP (CSP-AD MARF) v3.3.xlsx" --template "FUEL (MGM-AD ADMIN) (2).xlsx" --dry-run
+   .venv/bin/fuel-parser run --source "FUEL RESP (CSP-AD MARF) v3.3.xlsx" --dry-run
    ```
 4. Open `output/FUEL_IMPORT_AUDIT_….xlsx`: **Summary** (reconciliation), **MappingStatus**, **Review** (each held
    record with its reason and the action to take), **RowLog** (every source row).
@@ -56,7 +56,7 @@ to support a `VERIFIED` entry. It never changes the configuration.
 ## Exporting
 
 ```bash
-.venv/bin/fuel-parser run --source <export.xlsx> --template <template.xlsx> --last-id <last Id in the live MASTERLIST>
+.venv/bin/fuel-parser run --source <export.xlsx> [--source <another export.xlsx> ...] --last-id <last Id in the live MASTERLIST>
 ```
 
 - `--leads-log` also writes the optional 17-column Leads Log.
@@ -79,6 +79,8 @@ personal data and is git-ignored.
 
 | Situation | Option |
 |---|---|
+| Several exports at once (bulk import) | Repeat `--source`; one combined import file is produced and duplicates across files are held |
+| MASTERLIST columns were re-arranged | `--template <file.xlsx>` with the 35 headers in the new order; otherwise the built-in layout is used |
 | Which sheet is read | Only the response sheet: `MARF RAW`, or the one sheet with the response headers. All other sheets (team logs etc.) are ignored and listed in the audit |
 | Several sheets look like response sheets | `--sheet "<name>"` to choose one |
 | Compare with the workbook's team sheets (reference only) | `--team-sheet-check` |
@@ -103,7 +105,8 @@ FUEL_GOLDEN_SOURCE="/path/FUEL RESP (CSP-AD MARF) v3.3.xlsx" FUEL_GOLDEN_TEMPLAT
 Open the Vercel site (e.g. https://fuelparser.vercel.app). It runs the same parser **inside your browser**: files are read on your
 computer and never uploaded.
 
-1. Drop the response export and the `FUEL (MGM-AD ADMIN)` template (and optionally the reviewed seller directory CSV).
+1. Drop one or more response exports (a bulk import is combined into one file). The MASTERLIST layout is built in: add a template only
+   if its columns were re-arranged. Optionally add the reviewed seller directory CSV.
 2. **Check files.** See the counts, reconciliation and issues.
 3. **Team seller columns.** Choose G/H, I/J or K/L for a team, or leave it *Unresolved* (records stay in review). Your name and
    today's date are recorded, and exported records are flagged as owner-approved, not verified.

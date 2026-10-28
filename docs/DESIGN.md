@@ -524,6 +524,8 @@ every source row       appears exactly once in RowLog
 | H-31 | Vercel deployment | **Approved (2026-10-28):** Vercel serves a static, read-only information page only (`api/index.py`, routed by `vercel.json`). No upload, no processing, no import of `fuel_parser`; all parsing stays local (H-29). A hosted parser would need a separate design change |
 | H-32 | Browser app on Vercel (supersedes the static-only part of H-31) | **Approved (2026-10-28):** the Vercel site serves a browser app (`public/`) that runs the unchanged `fuel_parser` code inside the user's browser via Pyodide (WebAssembly). Files are read in the browser and **never uploaded**; the page may only contact its own site and `cdn.jsdelivr.net` (Pyodide engine), enforced by Content-Security-Policy. The import ledger is kept in the browser's IndexedDB (fingerprints only). Seller-column assignments made on screen are `OWNER_APPROVED_UNVERIFIED` with the approver's name and date (N.1); the shipped `teams.yaml` still has every team `UNRESOLVED` |
 | H-33 | Response sheet only | **Approved (2026-10-28):** the parser uses exactly one sheet of the source workbook: the response sheet, identified by its headers (Timestamp, SALES LEADER, Lead Source, Seller Name blocks). `MARF RAW` is preferred; otherwise a single matching sheet is used automatically (supersedes the M.2/T38 confirmation for that case), and only several matching sheets need a choice. Every other sheet is ignored and listed in the audit Summary. The team-sheet cross-check (O-8) is opt-in (`--team-sheet-check`), off by default |
+| H-34 | Built-in MASTERLIST layout | **Approved (2026-10-28):** the 35 MASTERLIST headers are fixed, so the exact header text, field and width are carried in `config/mapping_profile.yaml` (checked against the approved sha256 at load). No template file is needed. A template file is optional and used only when the columns are re-arranged: it must hold exactly the 35 approved headers (matched by meaning, any order, any sheet name), and the output follows its column order. A template with missing or extra headers is refused |
+| H-35 | Bulk import | **Approved (2026-10-28):** one run accepts several response exports and produces one combined import file. Each export gets its own sheet detection and mapping; the audit records every file (name, checksum, sheet, responses, ignored sheets) and adds a Source file column to Review, Issues and RowLog. The same response found in two exports is held as `PROBABLE_DUPLICATE` (not exported twice); the same file added twice is refused |
 
 ### Blocking (the build needs an answer)
 
@@ -1154,3 +1156,19 @@ receive client data, which breaks H-29. Running the parser in the browser keeps 
 - Clearing browser site data erases the import history and saved team assignments.
 - First visit downloads the ~15 MB engine from `cdn.jsdelivr.net` (cached afterwards). A network that blocks jsDelivr prevents loading; `scripts/serve_web.py --pyodide <dir>` can serve a local copy.
 - The browser tests are run with Playwright outside `pytest`, because they need the Pyodide distribution.
+
+
+---
+
+## Q. Built-in layout, bulk import and output cleanup — v0.9 (H-34, H-35)
+
+| Area | Behaviour |
+|---|---|
+| MASTERLIST layout | Built in (35 columns, exact header bytes, template widths). An optional template file overrides the column **order** only, and must contain exactly the 35 approved headers |
+| Response exports | One or more per run. Records are numbered across all files in file order. Duplicates across files are caught by record key (same response) and content hash |
+| Re-run protection | A bulk batch stores every file's checksum; re-processing any of those files reports the earlier batch. Exported record keys are ledgered as before |
+| Output cleanup (audit check 5 finding) | All outputs of a run (import file, Leads Log, audit) are deleted if any later step fails, including the ledger write, so no un-ledgered import file can remain |
+| CLI | `--source` can be repeated; `--template` is optional |
+| Browser app | "Response exports" accepts several files (drop or Add files); the template row shows the built-in layout and accepts a template only for a re-arranged layout |
+
+**Verified:** 101 tests pass. In Chromium: the real v3.3 export is checked with no template (3,064 responses, built-in layout); a bulk run of 3 exports with one renamed response sheet reconciles (3,067 responses, 4/4 checks); a template dropped among the exports is flagged red and blocks the check; a re-arranged template drives the output order, and the browser's bulk import file is identical to the CLI's.

@@ -40,19 +40,29 @@ async function init() {
   return { version: bundle.version };
 }
 
-function writeInputs(files) {
-  const paths = {};
-  for (const [role, f] of Object.entries(files || {})) {
-    const dir = `/work/in/${role}`;
-    py.FS.mkdirTree(dir);
-    for (const name of py.FS.readdir(dir)) if (name !== "." && name !== "..") py.FS.unlink(`${dir}/${name}`);
-    if (!f) continue;
-    const safe = f.name.replace(/[^\w.\- ()]/g, "_");
-    const path = `${dir}/${safe}`; // one folder per role keeps the original file name for output names
-    py.FS.writeFile(path, new Uint8Array(f.buffer));
-    paths[role] = path;
+function clearDir(dir) {
+  if (!py.FS.analyzePath(dir).exists) return;
+  for (const name of py.FS.readdir(dir)) {
+    if (name === "." || name === "..") continue;
+    const full = `${dir}/${name}`;
+    if (py.FS.isDir(py.FS.stat(full).mode)) { clearDir(full); py.FS.rmdir(full); } else py.FS.unlink(full);
   }
-  return paths;
+}
+
+// Write the selected files into the in-browser file system. Each file keeps its own name for the audit.
+function writeInputs(files) {
+  clearDir("/work/in");
+  const write = (dir, f) => {
+    py.FS.mkdirTree(dir);
+    const path = `${dir}/${f.name.replace(/[^\w.\- ()]/g, "_")}`;
+    py.FS.writeFile(path, new Uint8Array(f.buffer));
+    return path;
+  };
+  return {
+    sources: (files.sources || []).map((f, i) => write(`/work/in/source/${i}`, f)),
+    template: files.template ? write("/work/in/template", files.template) : null,
+    sellers: files.sellers ? write("/work/in/sellers", files.sellers) : null,
+  };
 }
 
 const ops = {
@@ -64,7 +74,7 @@ const ops = {
   },
   async run({ params, files }) {
     const paths = writeInputs(files);
-    const res = JSON.parse(bridge.run(JSON.stringify({ ...params, source: paths.source, template: paths.template, sellers: paths.sellers || null })));
+    const res = JSON.parse(bridge.run(JSON.stringify({ ...params, sources: paths.sources, template: paths.template, sellers: paths.sellers })));
     const outputs = {};
     const transfer = [];
     if (res.status === "ok") {

@@ -104,6 +104,9 @@ def _result(result) -> dict:
         "outputs": {k: str(v) for k, v in result.outputs.items()},
         "previous_batches": [{"batch_id": b.batch_id, "exported": b.records_exported} for b in result.previous_batches],
         "sheet": result.sheet.sheet_name, "ignored_sheets": result.sheet.ignored_sheets,
+        "sources": [{"name": f.name, "sheet": f.sheet.sheet_name, "responses": len(f.sheet.rows),
+                     "ignored": f.sheet.ignored_sheets} for f in result.sources],
+        "layout": {"origin": result.layout.origin, "reordered": result.layout.reordered},
     }
 
 
@@ -115,7 +118,8 @@ def run(params_json: str) -> str:
         for old in out.glob("*"):
             old.unlink()
         opts = RunOptions(
-            source=Path(p["source"]), template=Path(p["template"]), out_dir=out, config_dir=APP / "config",
+            source=[Path(s) for s in p["sources"]], template=Path(p["template"]) if p.get("template") else None,
+            out_dir=out, config_dir=APP / "config",
             ledger_path=LEDGER, profiles_dir=WORK / "profiles",
             sellers_path=Path(p["sellers"]) if p.get("sellers") else None,
             teams_path=_teams_with_overrides(p.get("overrides") or {}),
@@ -127,7 +131,7 @@ def run(params_json: str) -> str:
     except NeedsConfirmation as e:
         items = [{"column": i.letter, "header": i.header, "kind": i.kind, "target": i.target, "note": i.note}
                  for i in (e.cmap.needs_confirmation if e.cmap else [])]
-        return json.dumps({"status": "needs_confirmation", "message": str(e), "sheet": e.sheet, "items": items})
+        return json.dumps({"status": "needs_confirmation", "message": str(e), "sheet": e.sheet, "file": e.file, "items": items})
     except _KNOWN as e:
         return json.dumps({"status": "error", "message": str(e)})
     except Exception as e:  # unexpected: show type and message, never workbook values
@@ -153,7 +157,6 @@ def classify(path: str) -> str:
     "both" (a workbook holding both), or "unknown".
     """
     import csv
-    import hashlib
 
     import openpyxl
 
@@ -163,9 +166,10 @@ def classify(path: str) -> str:
     profile = load_profile(APP / "config" / "mapping_profile.yaml")
     src_keys = set(profile.source["signature_keys"])
     tpl_keys = {"completion time", "client's surname", "seller name1", "lead source"}
-    digest = profile.dest["template_header_sha256"]
+    builtin = [match_key(t["header"]) for t in profile.dest["template"]]
     p = Path(path)
-    found = {"source_sheet": None, "template_sheet": None, "template_exact": False}
+    found = {"source_sheet": None, "template_sheet": None, "template_exact": False, "template_reordered": False,
+             "template_missing": 0}
 
     def inspect(name: str, header: list) -> None:
         found["_sheets"] = found.get("_sheets", 0) + 1
@@ -175,9 +179,12 @@ def classify(path: str) -> str:
         if tpl_keys <= keys:
             while header and header[-1] is None:
                 header.pop()
-            exact = hashlib.sha256("\x1f".join("" if v is None else str(v) for v in header).encode("utf-8")).hexdigest() == digest
-            if found["template_sheet"] is None or (exact and not found["template_exact"]):
-                found["template_sheet"], found["template_exact"] = name, exact
+            got = [match_key(h) for h in header]
+            valid = sorted(got) == sorted(builtin)  # the 35 approved headers, in any order (H-34)
+            if found["template_sheet"] is None or (valid and not found["template_exact"]):
+                found["template_sheet"], found["template_exact"] = name, valid
+                found["template_reordered"] = valid and got != builtin
+                found["template_missing"] = len(set(builtin) - set(got))
 
     try:
         if p.suffix.lower() == ".csv":

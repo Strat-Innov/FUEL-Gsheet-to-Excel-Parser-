@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-import hashlib
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -11,6 +11,7 @@ import openpyxl
 from openpyxl.utils import get_column_letter
 
 from .config import Profile
+from .headers import match_key
 from .model import Record
 
 
@@ -18,40 +19,73 @@ class TemplateError(ValueError):
     """Raised when the destination template does not match the approved schema."""
 
 
-def _header_digest(header: list[object]) -> str:
-    return hashlib.sha256("\x1f".join("" if v is None else str(v) for v in header).encode("utf-8")).hexdigest()
+@dataclass(frozen=True)
+class Layout:
+    """Destination column layout: exact header cells, the field each column holds, and widths."""
+
+    headers: tuple
+    fields: tuple
+    widths: tuple  # (column letter, width) pairs
+    origin: str  # "built-in" or "<file name> · sheet <name>"
+    reordered: bool = False
+
+
+def builtin_layout(profile: Profile) -> Layout:
+    """The fixed 35-column MASTERLIST layout carried in the mapping profile (H-34)."""
+    tpl = profile.dest["template"]
+    widths = tuple((get_column_letter(i), t.get("width")) for i, t in enumerate(tpl, start=1))
+    return Layout(tuple(t["header"] for t in tpl), tuple(t["field"] for t in tpl), widths, "built-in")
 
 
 @functools.lru_cache(maxsize=4)
-def _template_header_cached(path: str, size: int, mtime: float, preferred: str, digest: str):
+def _layout_from_file(path: str, size: int, mtime: float, preferred: str, key_to_field: tuple, ref_fields: tuple) -> Layout:
+    k2f = dict(key_to_field)
     wb = openpyxl.load_workbook(path, read_only=False)
+    best = None  # closest non-matching sheet, for a useful error message
     try:
-        # The approved sheet name first, then any other sheet: the template is identified by its exact header.
         names = [preferred] * (preferred in wb.sheetnames) + [n for n in wb.sheetnames if n != preferred]
         for name in names:
             ws = wb[name]
             header = [ws.cell(1, c).value for c in range(1, ws.max_column + 1)]
             while header and header[-1] is None:
                 header.pop()
-            if _header_digest(header) == digest:
-                widths = {get_column_letter(i): ws.column_dimensions[get_column_letter(i)].width for i in range(1, len(header) + 1)}
-                return tuple(header), tuple(widths.items())
+            keys = [match_key(h) for h in header]
+            fields = [k2f.get(k) for k in keys]
+            if len(header) == len(k2f) and None not in fields and len(set(fields)) == len(fields):
+                widths = tuple((get_column_letter(i), ws.column_dimensions[get_column_letter(i)].width)
+                               for i in range(1, len(header) + 1))
+                return Layout(tuple(header), tuple(fields), widths, f"{Path(path).name} · sheet {name}",
+                              tuple(fields) != ref_fields)
+            overlap = sum(1 for f in fields if f)
+            if overlap and (best is None or overlap > best[0]):
+                missing = [k for k in k2f if k not in keys]
+                unknown = [str(h).strip() for h, f in zip(header, fields) if not f and h is not None]
+                best = (overlap, name, missing, unknown)
     finally:
         wb.close()
-    raise TemplateError(
-        "No sheet in the template file has the approved 35-column MASTERLIST header. "
-        "No output was written. Check that the correct template was supplied.")
+    detail = ""
+    if best:
+        _, name, missing, unknown = best
+        detail = (f" Closest sheet '{name}': missing {len(missing)} header(s)"
+                  + (f" ({', '.join(missing[:5])}{'…' if len(missing) > 5 else ''})" if missing else "")
+                  + (f"; unrecognised: {', '.join(u[:40] for u in unknown[:5])}" if unknown else "") + ".")
+    raise TemplateError("No sheet in the template file has the 35 MASTERLIST headers (in any order). "
+                        "No output was written." + detail + " Leave the template empty to use the built-in layout.")
 
 
-def read_template_header(template: Path, profile: Profile) -> tuple[list[object], dict[str, float]]:
-    """Return the template's exact header cells and column widths, after the schema check (T43).
+def read_template_header(template: Path | None, profile: Profile) -> Layout:
+    """Return the output layout: built-in when no template is given, otherwise the template's own order.
 
-    The sheet is found by its byte-exact header, so a template whose sheet is not named MASTERLIST is accepted.
+    A supplied template must contain exactly the 35 approved headers. They are matched by meaning, so a
+    re-arranged template is accepted and the output follows its column order (H-34).
     """
+    base = builtin_layout(profile)
+    if template is None:
+        return base
+    key_to_field = tuple((match_key(h), f) for h, f in zip(base.headers, base.fields))
     st = Path(template).stat()
-    header, widths = _template_header_cached(str(Path(template).resolve()), st.st_size, st.st_mtime,
-                                             profile.dest["sheet"], profile.dest["template_header_sha256"])
-    return list(header), dict(widths)
+    return _layout_from_file(str(Path(template).resolve()), st.st_size, st.st_mtime, profile.dest["sheet"],
+                             key_to_field, base.fields)
 
 
 def set_text(cell, value: object) -> bool:
@@ -64,22 +98,22 @@ def set_text(cell, value: object) -> bool:
     return False
 
 
-def write_masterlist(path: Path, header: list[object], widths: dict[str, float], records: list[Record],
-                     profile: Profile) -> list[Record]:
-    """Write exported records. Returns records whose text needed formula escaping."""
+def write_masterlist(path: Path, layout: Layout, records: list[Record], profile: Profile) -> list[Record]:
+    """Write exported records in the layout's column order. Returns records whose text needed formula escaping."""
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = profile.dest["sheet"]
+    header = layout.headers
     for c, h in enumerate(header, start=1):
         ws.cell(1, c).value = h  # byte-exact header (AC8)
-    for letter, w in widths.items():
+    for letter, w in layout.widths:
         if w:
             ws.column_dimensions[letter].width = w
     dt_cols = set(profile.dest.get("datetime_columns") or [])
     dt_fmt = profile.dest.get("datetime_format", "m/d/yy h:mm")
     escaped = []
     for r, rec in enumerate(records, start=2):
-        for c, fid in enumerate(profile.dest_columns, start=1):
+        for c, fid in enumerate(layout.fields, start=1):
             val = rec.values.get(fid)
             cell = ws.cell(r, c)
             if fid == "id":

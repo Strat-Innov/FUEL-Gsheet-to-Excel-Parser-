@@ -68,7 +68,8 @@ class Ledger:
         with closing(self._connect()) as con:
             rows = con.execute(
                 "SELECT batch_id, created_at, source_file_name, records_exported, status, output_path "
-                "FROM import_batch WHERE source_file_sha256 = ? AND status = 'exported' ORDER BY created_at", (sha256,)).fetchall()
+                "FROM import_batch WHERE instr(source_file_sha256, ?) > 0 AND status = 'exported' ORDER BY created_at",
+                (sha256,)).fetchall()  # a bulk batch stores its files' checksums joined by ';'
         return [BatchRow(*r) for r in rows]
 
     def list_batches(self) -> list[BatchRow]:

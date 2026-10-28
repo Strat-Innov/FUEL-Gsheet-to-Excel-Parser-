@@ -32,7 +32,7 @@ const store = {
 };
 
 const state = {
-  files: { source: null, template: null, sellers: null },
+  files: { sources: [], template: null, sellers: null },
   flags: { sheet: "", accept_suggestions: false, ignore_unmapped: false },
   result: null,
   assignments: store.get("fuel.teamAssignments", {}), // team key -> slot (1|2|3)
@@ -79,32 +79,23 @@ function busy(on, text) {
 }
 
 // ---------- files ----------
-const ROLE_LABEL = { source: "response export", template: "MASTERLIST template", sellers: "seller directory" };
 const dz = $("#dropzone");
 dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
 dz.addEventListener("dragleave", () => dz.classList.remove("over"));
 dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("#file-input").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; addFiles(files); }); // copy: FileList is live
 
-// Every row is its own drop target and file picker, so a file can be placed explicitly.
+// Each row is also a drop target and picker, so a file can be placed explicitly.
 document.querySelectorAll(".file-row").forEach((row) => {
   const role = row.dataset.role;
   const input = row.querySelector("input[type=file]");
   row.querySelector(".choose").addEventListener("click", () => input.click());
-  input.addEventListener("change", () => { const files = [...input.files]; input.value = ""; if (files.length) addFiles(files.slice(0, 1), role); });
+  input.addEventListener("change", () => { const files = [...input.files]; input.value = ""; if (files.length) addFiles(files, role); });
   row.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); row.classList.add("over"); });
   row.addEventListener("dragleave", () => row.classList.remove("over"));
-  row.addEventListener("drop", (e) => {
-    e.preventDefault(); e.stopPropagation(); row.classList.remove("over");
-    const files = [...e.dataTransfer.files];
-    const note = files.length > 1 ? `Only ${files[0].name} was used: drop one file per row, or drop several files on the large area above to place them automatically.` : null;
-    if (files.length) addFiles(files.slice(0, 1), role, note);
-  });
-  row.querySelector(".remove").addEventListener("click", () => { state.files[role] = null; renderFiles(); });
-});
-$("#btn-swap").addEventListener("click", () => {
-  [state.files.source, state.files.template] = [state.files.template, state.files.source];
-  renderFiles();
+  row.addEventListener("drop", (e) => { e.preventDefault(); e.stopPropagation(); row.classList.remove("over"); addFiles([...e.dataTransfer.files], role); });
+  const rm = row.querySelector(".remove");
+  if (rm) rm.addEventListener("click", () => { state.files[role] = null; renderFiles(); });
 });
 
 async function readAndClassify(f) {
@@ -113,42 +104,28 @@ async function readAndClassify(f) {
   return file;
 }
 
-// Place files automatically (large drop area) or on the row they were dropped on (targetRole).
-async function addFiles(list, targetRole, firstNote) {
+// targetRole: "sources" | "template" | "sellers" when dropped on a row; undefined for the large drop area.
+async function addFiles(list, targetRole) {
   clearAlert();
   await engineReadyPromise;
-  busy(true, "Reading files…");
-  const notes = firstNote ? [firstNote] : [];
+  busy(true, `Reading ${list.length} file${list.length > 1 ? "s" : ""}…`);
+  const notes = [];
   try {
-    const files = [];
     for (const f of list) {
       if (!/\.(xlsx|csv)$/i.test(f.name)) { notes.push(`${f.name}: only .xlsx and .csv files are supported.`); continue; }
       const file = await readAndClassify(f);
       if (file.info.kind === "error") { notes.push(`${f.name} could not be read (${file.info.message}).`); continue; }
-      files.push(file);
-    }
-    if (targetRole) {
-      if (files[0]) state.files[targetRole] = files[0];
-    } else {
-      const placed = new Set();
-      const put = (role, file) => { state.files[role] = file; placed.add(role); };
-      const free = (role) => !placed.has(role);
-      // Recognised files first, then the rest into whichever main slot is still open.
-      const order = { sellers: 0, source: 1, template: 1, both: 2, unknown: 3 };
-      for (const file of files.sort((a, b) => order[a.info.kind] - order[b.info.kind])) {
-        const k = file.info.kind;
-        if (k === "sellers") { put("sellers", file); continue; }
-        let role = k === "source" || k === "template" ? k : null;
-        if (k === "both") role = free("source") ? "source" : "template";
-        if (!role || !free(role)) {
-          // Prefer an empty slot, then any slot this drop has not used yet.
-          const other = ["source", "template"].find((r) => r !== role && free(r) && !state.files[r])
-            || ["source", "template"].find((r) => r !== role && free(r));
-          if (!other) { notes.push(`${file.name} was not placed: both slots are already filled by this drop.`); continue; }
-          if (role) notes.push(`${file.name} also looks like a ${ROLE_LABEL[role]}; it was placed as the ${ROLE_LABEL[other]}. Use Swap if that is wrong.`);
-          role = other;
+      let role = targetRole;
+      if (!role) role = file.info.kind === "sellers" ? "sellers" : file.info.kind === "template" ? "template" : "sources";
+      if (role === "sources") {
+        if (state.files.sources.some((s) => s.name === file.name)) {
+          notes.push(`${file.name} is already in the list; the newer copy replaced it.`);
+          state.files.sources = state.files.sources.filter((s) => s.name !== file.name);
         }
-        put(role, file);
+        state.files.sources.push(file);
+      } else {
+        if (list.length > 1 && targetRole) notes.push(`Only one ${role === "template" ? "template" : "seller directory"} can be used: ${list[list.length - 1].name === f.name ? "the last file dropped" : f.name} was kept.`);
+        state.files[role] = file;
       }
     }
   } finally { busy(false); }
@@ -160,40 +137,60 @@ async function addFiles(list, targetRole, firstNote) {
 function describe(role, file) {
   const i = file.info || {};
   if (role === "sellers") return i.kind === "sellers" ? ["ok", "Seller directory CSV recognised"] : ["warn", "Does not look like a seller directory (first column should be seller_name)."];
-  if (role === "source") {
-    if (i.source_sheet) return ["ok", `Response export recognised · using sheet “${i.source_sheet}”` + (i.other_sheets ? ` · ${i.other_sheets} other sheet${i.other_sheets > 1 ? "s" : ""} ignored` : "")];
-    if (i.template_sheet) return ["err", "This looks like the MASTERLIST template, not a response export. Use Swap or choose another file."];
-    return ["warn", "Response headers (Timestamp, SALES LEADER, Seller Name) not found. The check will explain what is missing."];
+  if (role === "sources") {
+    const others = i.other_sheets ? ` · ${i.other_sheets} other sheet${i.other_sheets > 1 ? "s" : ""} ignored` : "";
+    if (i.source_sheet) return ["ok", `Response export recognised · using sheet “${i.source_sheet}”${others}`];
+    if (i.template_sheet) return ["err", "This is a MASTERLIST template, not a response export. Remove it (the layout is built in)."];
+    return ["err", "No response sheet found (Timestamp, SALES LEADER, Lead Source, Seller Name). Remove this file or check it."];
   }
-  if (i.template_sheet && i.template_exact) return ["ok", `MASTERLIST template recognised · sheet “${i.template_sheet}” · all 35 headers match`];
-  if (i.template_sheet) return ["err", `Sheet “${i.template_sheet}” looks like a MASTERLIST but its header differs from the approved 35 columns. The check will stop until the correct template is used.`];
-  if (i.source_sheet) return ["err", "This looks like a response export, not the template. Use Swap or choose another file."];
-  return ["warn", "MASTERLIST header not found in any sheet."];
+  if (i.template_sheet && i.template_exact)
+    return ["ok", i.template_reordered ? `Template recognised · sheet “${i.template_sheet}” · columns re-arranged: the output will follow this template`
+                                       : `Template recognised · sheet “${i.template_sheet}” · same arrangement as the built-in layout`];
+  if (i.template_sheet) return ["err", `Sheet “${i.template_sheet}” is missing ${i.template_missing} of the 35 MASTERLIST headers or has extra ones. Use the built-in layout or a complete template.`];
+  if (i.source_sheet) return ["err", "This is a response export, not a template. Add it to Response exports instead."];
+  return ["err", "No MASTERLIST header found in any sheet."];
 }
 
 function renderFiles() {
-  document.querySelectorAll(".file-row").forEach((row) => {
-    const role = row.dataset.role;
-    const f = state.files[role];
-    const name = row.querySelector(".fname");
-    const note = row.querySelector(".fnote");
-    name.textContent = f ? `${f.name} · ${(f.buffer.byteLength / 1024).toFixed(0)} KB` : "Drop a file on this row or choose one";
-    name.classList.toggle("muted", !f);
-    const [cls, text] = f ? describe(role, f) : ["", ""];
-    note.className = "fnote " + cls;
-    note.textContent = text;
-    row.querySelector(".remove").classList.toggle("hidden", !f);
-    row.querySelector(".choose").textContent = f ? "Replace" : "Choose file";
-  });
-  $("#btn-swap").disabled = !(state.files.source || state.files.template);
+  // Response exports: a list.
+  const list = $("#source-list");
+  list.replaceChildren(...state.files.sources.map((f, idx) => {
+    const [cls, text] = describe("sources", f);
+    return el("li", {}, el("span", { class: "fname", text: `${f.name} · ${(f.buffer.byteLength / 1024).toFixed(0)} KB` }),
+      el("button", { class: "link", text: "Remove", onclick: () => { state.files.sources.splice(idx, 1); renderFiles(); } }),
+      el("span", { class: "fnote " + cls, text }));
+  }));
+  $("#source-empty").classList.toggle("hidden", state.files.sources.length > 0);
+  // Template: built-in unless a file is supplied.
+  const trow = document.querySelector(".file-row[data-role=template]");
+  const t = state.files.template;
+  trow.querySelector(".fname").textContent = t ? `${t.name} · ${(t.buffer.byteLength / 1024).toFixed(0)} KB` : "Built-in MASTERLIST layout · 35 fixed columns";
+  const [tcls, ttext] = t ? describe("template", t) : ["ok", "No template file needed. Add one only if the MASTERLIST columns were re-arranged."];
+  trow.querySelector(".fnote").className = "fnote " + tcls;
+  trow.querySelector(".fnote").textContent = ttext;
+  trow.querySelector(".remove").classList.toggle("hidden", !t);
+  trow.querySelector(".choose").textContent = t ? "Replace template" : "Use a template file";
+  // Seller directory.
+  const srow = document.querySelector(".file-row[data-role=sellers]");
+  const s = state.files.sellers;
+  srow.querySelector(".fname").textContent = s ? `${s.name} · ${(s.buffer.byteLength / 1024).toFixed(0)} KB` : "Drop a file on this row or choose one";
+  srow.querySelector(".fname").classList.toggle("muted", !s);
+  const [scls, stext] = s ? describe("sellers", s) : ["", ""];
+  srow.querySelector(".fnote").className = "fnote " + scls;
+  srow.querySelector(".fnote").textContent = stext;
+  srow.querySelector(".remove").classList.toggle("hidden", !s);
+  srow.querySelector(".choose").textContent = s ? "Replace" : "Choose file";
   updateCheckButton();
 }
+
 function updateCheckButton() {
-  const both = state.files.source && state.files.template;
-  const wrong = ["source", "template"].some((r) => state.files[r] && describe(r, state.files[r])[0] === "err");
-  $("#btn-check").disabled = !both || wrong || !$("#engine").classList.contains("ready");
-  $("#check-hint").textContent = !both ? "Add the response export and the template."
-    : wrong ? "Fix the file marked in red first (Swap or Replace)." : "Validation only: nothing is exported yet.";
+  const n = state.files.sources.length;
+  const wrong = state.files.sources.some((f) => describe("sources", f)[0] === "err")
+    || (state.files.template && describe("template", state.files.template)[0] === "err");
+  $("#btn-check").disabled = !n || wrong || !$("#engine").classList.contains("ready");
+  $("#check-hint").textContent = !n ? "Add at least one response export."
+    : wrong ? "Remove or replace the file marked in red first."
+    : `Validation only: nothing is exported yet.${n > 1 ? ` The ${n} exports will be combined into one import file.` : ""}`;
 }
 
 // ---------- running ----------
@@ -262,9 +259,12 @@ function renderSummary() {
   metric("Already imported", c.records_already_imported);
   const ul = $("#checks");
   ul.replaceChildren(...r.checks.map((k) => el("li", { text: `${k.ok ? "✅" : "❌"} ${k.name}` })));
-  const ignored = r.ignored_sheets.length ? ` (${r.ignored_sheets.length} other sheet${r.ignored_sheets.length > 1 ? "s" : ""} ignored: ${r.ignored_sheets.join(", ")})` : "";
-  $("#headline").textContent = `Response sheet "${r.sheet}"${ignored}. Exported: ${fmt(r.exported_verified)} verified · ${fmt(r.exported_owner_approved)} owner-approved (not verified).` +
-    (r.previous_batches.length ? ` This exact file was exported before (${r.previous_batches.map((b) => b.batch_id).join(", ")}).` : "");
+  const files = r.sources.map((s) => `${s.name} (sheet “${s.sheet}”, ${fmt(s.responses)} responses` +
+    (s.ignored.length ? `, ${s.ignored.length} other sheet${s.ignored.length > 1 ? "s" : ""} ignored)` : ")")).join(" · ");
+  $("#headline").textContent = `${r.sources.length} response export${r.sources.length > 1 ? "s" : ""}: ${files}. ` +
+    `MASTERLIST layout: ${r.layout.origin === "built-in" ? "built-in" : r.layout.origin + (r.layout.reordered ? " (re-arranged)" : "")}. ` +
+    `Exported: ${fmt(r.exported_verified)} verified · ${fmt(r.exported_owner_approved)} owner-approved (not verified).` +
+    (r.previous_batches.length ? ` Some of these files were exported before (${r.previous_batches.map((b) => b.batch_id).join(", ")}).` : "");
   const tb = $("#issues");
   tb.replaceChildren(...r.issues.map((i) => el("tr", {}, el("td", { text: i.code }), el("td", {}, el("span", { class: "sev " + i.severity, text: i.severity })),
     el("td", { class: "num", text: fmt(i.count) }), el("td", { class: "muted", text: i.code === "SLOT_UNRESOLVED" ? "Assign seller columns for the team on the “Team seller columns” screen, or leave the records in review." : i.action }))));
@@ -277,7 +277,7 @@ function renderTeams() {
   const tb = $("#teams");
   tb.replaceChildren();
   $("#approved-by").value = $("#approved-by").value || store.get("fuel.approvedBy", "");
-  $("#teams-sheet").textContent = state.result.sheet;
+  $("#teams-sheet").textContent = state.result.sources.map((s) => `${s.name}: ${s.sheet}`).join("; ");
   for (const t of state.result.leaders) {
     const locked = t.status === "VERIFIED";
     const sel = el("select", { "data-key": t.key });

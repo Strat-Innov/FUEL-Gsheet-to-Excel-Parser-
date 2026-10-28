@@ -199,6 +199,12 @@ def load_profile(path: Path) -> Profile:
             raise ConfigError(f"{path.name}: missing section '{key}'")
     if len(d["destination"].get("columns") or []) != 35:
         raise ConfigError(f"{path.name}: destination.columns must list exactly 35 fields")
+    tpl = d["destination"].get("template") or []
+    if [t.get("field") for t in tpl] != d["destination"]["columns"]:
+        raise ConfigError(f"{path.name}: destination.template must list the 35 columns in destination.columns order")
+    digest = hashlib.sha256("\x1f".join(str(t.get("header")) for t in tpl).encode("utf-8")).hexdigest()
+    if digest != d["destination"].get("template_header_sha256"):
+        raise ConfigError(f"{path.name}: built-in MASTERLIST headers differ from the approved schema (sha256 mismatch)")
     return Profile(d, file_sha256(path))
 
 

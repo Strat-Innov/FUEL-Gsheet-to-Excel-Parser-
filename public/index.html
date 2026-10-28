@@ -43,23 +43,22 @@
     <label class="dropzone" id="dropzone">
       <input type="file" id="file-input" accept=".xlsx,.csv" multiple hidden>
       <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
-      <strong>Drop the response export and the MASTERLIST template here</strong>
-      <span>or click to browse · several files at once · each file is placed by reading its headers — or drop it on a specific row below</span>
+      <strong>Drop your response exports here</strong>
+      <span>or click to browse · several exports at once for a bulk import · the MASTERLIST layout is built in · files are sorted by reading their headers</span>
     </label>
     <section class="card" id="files-card">
       <h2>Files</h2>
-      <div class="file-row" data-role="source">
-        <span class="role">Response export</span>
-        <div class="fbody"><span class="fname muted">Drop a file on this row or choose one</span><span class="fnote"></span></div>
-        <div class="factions"><button class="btn small choose">Choose file</button><button class="link remove hidden">Remove</button></div>
-        <input type="file" accept=".xlsx,.csv" hidden>
+      <div class="file-row" data-role="sources">
+        <span class="role">Response exports <em>(one or more)</em></span>
+        <div class="fbody"><ul class="flist" id="source-list"></ul><span class="fname muted" id="source-empty">Drop one or more exports on this row, or add them</span></div>
+        <div class="factions"><button class="btn small choose">Add files</button></div>
+        <input type="file" accept=".xlsx,.csv" multiple hidden>
       </div>
-      <div class="swap-row"><button class="link" id="btn-swap" disabled>⇅ Swap export and template</button></div>
       <div class="file-row" data-role="template">
-        <span class="role">MASTERLIST template</span>
-        <div class="fbody"><span class="fname muted">Drop a file on this row or choose one</span><span class="fnote"></span></div>
-        <div class="factions"><button class="btn small choose">Choose file</button><button class="link remove hidden">Remove</button></div>
-        <input type="file" accept=".xlsx,.csv" hidden>
+        <span class="role">MASTERLIST template <em>(optional)</em></span>
+        <div class="fbody"><span class="fname"></span><span class="fnote"></span></div>
+        <div class="factions"><button class="btn small choose">Use a template file</button><button class="link remove hidden">Use built-in</button></div>
+        <input type="file" accept=".xlsx" hidden>
       </div>
       <div class="file-row" data-role="sellers">
         <span class="role">Seller directory <em>(optional)</em></span>
@@ -87,8 +86,8 @@
   <div class="view hidden" id="view-teams">
     <section class="card">
       <h2>Which seller columns does each team use?</h2>
-      <p class="muted">These are the SALES LEADER values found in the responses on the response sheet (<span id="teams-sheet">MARF RAW</span>),
-        with how many responses name each one. Other sheets in the workbook are not used.</p>
+      <p class="muted">These are the SALES LEADER values found in the responses (<span id="teams-sheet">MARF RAW</span>),
+        with how many responses name each one across all exports. Other sheets in the workbook are not used.</p>
       <p class="muted">Records are exported only for teams with a seller-column assignment. Leave a team <b>Unresolved</b> to keep its records in review.
         An assignment made here is <b>your owner-approved assumption, not a verified mapping</b>: every exported record is flagged and the audit records your name and today's date.</p>
       <table><thead><tr><th>SALES LEADER (from the responses)</th><th class="num">Responses</th><th>Current status</th><th>Seller columns</th></tr></thead><tbody id="teams"></tbody></table>

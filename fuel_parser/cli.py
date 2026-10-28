@@ -21,8 +21,10 @@ DEFAULT_LEDGER = Path("output/import_history.sqlite")
 
 
 def _common(p: argparse.ArgumentParser) -> None:
-    p.add_argument("--source", required=True, type=Path, help="Google Forms response export (.xlsx or .csv)")
-    p.add_argument("--template", required=True, type=Path, help="FUEL (MGM-AD ADMIN) workbook with the MASTERLIST sheet")
+    p.add_argument("--source", required=True, type=Path, action="append",
+                   help="Google Forms response export (.xlsx or .csv). Repeat for a bulk import of several exports")
+    p.add_argument("--template", type=Path,
+                   help="Optional: a MASTERLIST template, only needed if the 35 columns were re-arranged (default: built-in layout)")
     p.add_argument("--config-dir", type=Path, default=Path("config"))
     p.add_argument("--profiles-dir", type=Path, default=Path("profiles"), help="Saved mapping confirmations")
     p.add_argument("--sellers", type=Path, help="Reviewed seller directory (.csv or .yaml); default config/sellers.csv|yaml")
@@ -53,16 +55,20 @@ def _print_preview(cmap) -> None:
 
 def cmd_preview(a) -> int:
     try:
-        _, sd, cmap = prepare(_options(a))
+        _, files, layout = prepare(_options(a))
     except NeedsConfirmation as e:
         print(f"NEEDS CONFIRMATION: {e}")
         if e.cmap:
             _print_preview(e.cmap)
         print("Re-run with --sheet, --accept-suggestions and/or --ignore-unmapped after checking the items above.")
         return 2
-    print(f"Response sheet '{sd.sheet_name}': {len(sd.rows)} responses, {sd.blank_rows} blank rows"
-          + (f"; ignored: {', '.join(sd.ignored_sheets)}" if sd.ignored_sheets else ""))
-    _print_preview(cmap)
+    print("MASTERLIST layout: " + ("built-in (35 columns)" if layout.origin == "built-in" else layout.origin
+                                    + (" (re-arranged)" if layout.reordered else "")))
+    for f in files:
+        sd = f.sheet
+        print(f"{f.name}: response sheet '{sd.sheet_name}': {len(sd.rows)} responses, {sd.blank_rows} blank rows"
+              + (f"; ignored: {', '.join(sd.ignored_sheets)}" if sd.ignored_sheets else ""))
+        _print_preview(f.cmap)
     print("Mapping complete: no item needs confirmation.")
     return 0
 
@@ -83,7 +89,10 @@ def cmd_run(a) -> int:
               + ", ".join(f"{b.batch_id} ({b.records_exported} exported)" for b in r.previous_batches))
     c = r.counts
     print(f"{'DRY RUN — ' if a.dry_run else ''}Batch {r.batch_id}")
-    print(f"  Response sheet: '{r.sheet.sheet_name}'" + (f" ({len(r.sheet.ignored_sheets)} other sheet(s) ignored)" if r.sheet.ignored_sheets else ""))
+    for f in r.sources:
+        print(f"  {f.name}: response sheet '{f.sheet.sheet_name}' ({len(f.sheet.rows)} responses"
+              + (f"; {len(f.sheet.ignored_sheets)} other sheet(s) ignored)" if f.sheet.ignored_sheets else ")"))
+    print("  MASTERLIST layout: " + ("built-in" if r.layout.origin == "built-in" else r.layout.origin))
     print(f"  Responses read: {c['responses']}  (blank rows {c['blank_rows']}, no client data {c['responses_no_client']}, "
           f"multi-block {c['responses_multi_block']})")
     print(f"  Records built: {c['records_built']} = exported {c['records_exported']} + review {c['records_review']} + "

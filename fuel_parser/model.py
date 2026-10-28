@@ -30,6 +30,7 @@ class Issue:
     field: str
     message: str
     record_key: str = ""
+    source_file: str = ""
 
 
 @dataclass
@@ -46,6 +47,7 @@ class Record:
 
     source_row: int
     block_index: int | None
+    source_file: str = ""
     values: dict[str, object] = field(default_factory=dict)
     meta: dict[str, object] = field(default_factory=dict)
     issues: list[Issue] = field(default_factory=list)
