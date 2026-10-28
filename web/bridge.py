@@ -41,7 +41,10 @@ def _teams_with_overrides(overrides: dict) -> Path:
         if slot not in (1, 2, 3):
             continue
         approval = {"slot": slot, "status": "OWNER_APPROVED_UNVERIFIED", "evidence_type": "business_rule",
-                    "approved_by": str(ov.get("approved_by") or "").strip(), "approved_on": str(ov.get("approved_on") or "")}
+                    "approved_by": str(ov.get("approved_by") or "").strip(), "approved_on": str(ov.get("approved_on") or "").strip()}
+        if not approval["approved_by"] or not approval["approved_on"]:
+            raise ValueError(f"The seller-column assignment for “{key}” has no approver name or date. Open “Team seller columns”, "
+                             "enter your name in “Approved by” and click “Apply and re-check”.")
         match = teams.lookup(key)
         if match is not None and match.exportable:
             continue  # a VERIFIED or approved entry in the shipped config wins

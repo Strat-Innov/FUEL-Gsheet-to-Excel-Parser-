@@ -31,11 +31,24 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage unavailable */ } },
 };
 
+// Applied assignments are stored with their approver and date, so they stay complete after a reload.
+function loadAssignments() {
+  const raw = store.get("fuel.teamAssignments", {});
+  const legacyBy = store.get("fuel.approvedBy", "");
+  const out = {};
+  for (const [key, v] of Object.entries(raw || {})) {
+    const a = typeof v === "number" ? { slot: v, approved_by: legacyBy, approved_on: new Date().toISOString().slice(0, 10) } : v;
+    if (a && [1, 2, 3].includes(Number(a.slot)) && String(a.approved_by || "").trim()) out[key] = { ...a, slot: Number(a.slot) };
+  }
+  return out; // entries without an approver are dropped: they were never validly approved
+}
+
 const state = {
   files: { sources: [], template: null, sellers: null },
   flags: { sheet: "", accept_suggestions: false, ignore_unmapped: false },
   result: null,
-  assignments: store.get("fuel.teamAssignments", {}), // team key -> slot (1|2|3)
+  assignments: loadAssignments(), // applied: team key -> { slot, approved_by, approved_on }
+  pending: {}, // dropdown choices not applied yet: team key -> slot (0 = Unresolved)
 };
 let engineReady;
 const engineReadyPromise = new Promise((r) => (engineReady = r));
@@ -195,11 +208,7 @@ function updateCheckButton() {
 
 // ---------- running ----------
 function overrides() {
-  const by = $("#approved-by").value.trim();
-  const today = new Date().toISOString().slice(0, 10);
-  const out = {};
-  for (const [key, slot] of Object.entries(state.assignments)) if (slot) out[key] = { slot: Number(slot), approved_by: by, approved_on: today };
-  return out;
+  return { ...state.assignments }; // only applied assignments, each with its own approver and date
 }
 function params(mode, extra = {}) {
   return {
@@ -278,28 +287,49 @@ function renderTeams() {
   tb.replaceChildren();
   $("#approved-by").value = $("#approved-by").value || store.get("fuel.approvedBy", "");
   $("#teams-sheet").textContent = state.result.sources.map((s) => `${s.name}: ${s.sheet}`).join("; ");
+  state.pending = {};
   for (const t of state.result.leaders) {
     const locked = t.status === "VERIFIED";
+    const applied = state.assignments[t.key];
     const sel = el("select", { "data-key": t.key });
     [["", "Unresolved — keep in review"], ["1", "G/H · Seller Name"], ["2", "I/J · Seller Name1"], ["3", "K/L · Seller Name2"]]
       .forEach(([v, label]) => sel.append(el("option", { value: v, text: label })));
-    sel.value = locked ? String(t.slot) : String(state.assignments[t.key] || "");
+    sel.value = locked ? String(t.slot) : String(applied ? applied.slot : "");
     sel.disabled = locked;
-    sel.addEventListener("change", () => { state.assignments[t.key] = sel.value ? Number(sel.value) : 0; });
-    const statusText = t.status === "OWNER_APPROVED_UNVERIFIED" ? "Owner-approved (not verified)" : t.status === "VERIFIED" ? "Verified" : "Unresolved";
+    sel.addEventListener("change", () => { state.pending[t.key] = sel.value ? Number(sel.value) : 0; markPending(); });
+    const statusText = t.status === "OWNER_APPROVED_UNVERIFIED"
+      ? `Owner-approved (not verified)${applied ? ` · ${applied.approved_by}, ${applied.approved_on}` : ""}`
+      : t.status === "VERIFIED" ? "Verified" : "Unresolved";
     tb.append(el("tr", {}, el("td", { text: t.labels.join(" / ") }), el("td", { class: "num", text: fmt(t.records) }),
       el("td", {}, el("span", { class: "status-pill", text: statusText })), el("td", {}, sel)));
   }
+  markPending();
+}
+function markPending() {
+  const changed = Object.entries(state.pending).filter(([k, slot]) => (state.assignments[k]?.slot || 0) !== slot).length;
+  $("#pending-note").textContent = changed ? `${changed} change${changed > 1 ? "s" : ""} not applied yet — click “Apply and re-check”.` : "";
 }
 $("#btn-apply").addEventListener("click", async () => {
-  const assigned = Object.values(state.assignments).some(Boolean);
-  if (assigned && !$("#approved-by").value.trim()) return showAlert("error", "Enter your name in “Approved by” before assigning seller columns.");
-  for (const k of Object.keys(state.assignments)) if (!state.assignments[k]) delete state.assignments[k];
+  const by = $("#approved-by").value.trim();
+  const today = new Date().toISOString().slice(0, 10);
+  const next = { ...state.assignments };
+  for (const [key, slot] of Object.entries(state.pending)) {
+    if (!slot) { delete next[key]; continue; }
+    if (next[key] && next[key].slot === slot) continue; // unchanged: keep its original approval
+    if (!by) return showAlert("error", "Enter your name in “Approved by” before assigning seller columns.");
+    next[key] = { slot, approved_by: by, approved_on: today };
+  }
+  state.assignments = next;
+  state.pending = {};
   store.set("fuel.teamAssignments", state.assignments);
-  store.set("fuel.approvedBy", $("#approved-by").value.trim());
+  if (by) store.set("fuel.approvedBy", by);
   await check();
 });
-$("#btn-clear-teams").addEventListener("click", () => { state.assignments = {}; store.set("fuel.teamAssignments", {}); renderTeams(); });
+$("#btn-clear-teams").addEventListener("click", () => {
+  state.assignments = {}; state.pending = {}; store.set("fuel.teamAssignments", {});
+  if (state.result) renderTeams();
+  showAlert("warn", "All teams reset to Unresolved. Click “Check files” or “Apply and re-check” to refresh the results.");
+});
 
 function renderReview() {
   const r = state.result;

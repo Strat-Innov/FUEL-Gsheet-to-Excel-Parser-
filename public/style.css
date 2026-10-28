@@ -63,6 +63,7 @@ label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 4
 input:not([type=checkbox]), select { font: inherit; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: var(--fg); }
 .actions { display: flex; gap: 12px; align-items: center; margin-top: 16px; flex-wrap: wrap; }
 .hint { color: var(--muted); font-size: 12px; }
+.hint.warn-text { color: var(--warn); font-weight: 600; }
 .btn { font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line); background: #fff; cursor: pointer; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .btn:disabled { opacity: .5; cursor: default; }
