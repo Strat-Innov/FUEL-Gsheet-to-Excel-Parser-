@@ -1,11 +1,11 @@
-# FUEL Response Parser — Design Specification (v0.5, for approval)
+# FUEL Response Parser — Design Specification (v0.6, for approval)
 
 | Item | Value |
 |---|---|
 | Phase | DESIGN (no production code) |
 | Source analysed | `FUEL RESP (CSP-AD MARF) v3.3.xlsx` (Google Forms response export) |
 | Destination analysed | `FUEL (MGM-AD ADMIN) (2).xlsx` → sheet `MASTERLIST` (Microsoft Forms export) |
-| Status | **v0.4: all data-handling rules approved. BUILD is blocked until H-2 (team → slot), H-6 (`Question`), H-28 (leader labels) and the H-1 directory review are verified** |
+| Status | **v0.6: exports-only access model (Section M). Blocked on B1 (seller-slot evidence) and B2/B3 policy approvals. See M.5** |
 
 > This document contains structure, counts and rules only. It holds no client records, phone numbers or e-mail addresses. Both workbooks were opened read-only, and neither was modified.
 
@@ -501,11 +501,11 @@ every source row       appears exactly once in RowLog
 | # | Topic | Status |
 |---|---|---|
 | H-1 | Seller e-mail source | **Approved: option (b).** A directory with submitter fallback and a mismatch warning. The **draft directory is under review** (J.1). It is not used until reviewed |
-| H-2 | Team → seller slot mapping | **OPEN: blocking.** Rule approved. Sample-confirmed only: `TEAM CALOY` → G/H, `TEAM HD` → I/J. The six source teams are **unverified** (J.2) |
+| H-2 | Team → seller slot mapping | **OPEN: blocking → B1** (M.5). The rule is approved. Only export-supported or approved evidence counts. Unsupported teams → Review |
 | H-3 | Destination Email / Name | **Approved**: Email = submitter e-mail. Name blank |
 | H-4 | Start time | **Approved**: copy of the source Timestamp |
 | H-5 | Id sequence | **Approved**: continue from the last Id you enter from the live MASTERLIST |
-| H-6 | Meaning of `Question` / `Question1` | **Split.** `Question1` = Showroom Walk-In detail: **approved**. `Question` = **OPEN: blocking**, mapped to nothing until verified against the MS Form (J.3) |
+| H-6 | Meaning of `Question` / `Question1` | `Question1` = Showroom Walk-In detail: **approved**. `Question`: **OPEN → B3** (M.5). Cannot be verified from the exports |
 | H-7 | v1 → v2 lead-source translation | **Approved** for the four translations in J.4. `Referral` and `Site Walk-in` stay **OPEN**, and those records go to Review (`UNMAPPED_VALUE`, ERROR) |
 | H-8 | "Others, please specify" text | **Approved: option (a)**, appended to REMARKS with the originating-question label (J.5) |
 | H-9 – H-12, H-14 – H-21 | Defaults | Accepted as recommended (no objection raised) |
@@ -518,7 +518,8 @@ every source row       appears exactly once in RowLog
 | H-25 | Trim leading/trailing whitespace, logged | **Approved** |
 | H-26 | (v0.2 "every flag → review") | **Withdrawn**, replaced by the D.8 validation policy |
 | H-27 | 17-column Leads Log as an optional separate output | **Approved** |
-| H-28 | Source SALES LEADER labels vs the MS Form's SALES LEADER options | **OPEN: blocking** (new, J.2) |
+| H-28 | Source SALES LEADER labels vs the MS Form's SALES LEADER options | **OPEN → B2** (M.5). Cannot be verified from the exports |
+| H-29 | Access model: user-provided `.xlsx`/`.csv` exports only | **Approved** (Section M) |
 
 ### Blocking (the build needs an answer)
 
@@ -755,7 +756,9 @@ Expected output under the rules above (`∅` = blank):
 
 **How to verify each mapping** (in order of authority):
 
-1. **Form editor (authoritative, read-only).** In Microsoft Forms, open the MGM-AD form → *…* → **Branching**, then:
+> **v0.6:** the user has no access to the forms or live sheets. Methods 1 and 2 are available only if a form owner supplies the result, and test submissions are not used at all. See M.4 for the export-only alternatives.
+
+1. **Form editor (authoritative, read-only; requires someone with form access).** In Microsoft Forms, open the MGM-AD form → *…* → **Branching**, then:
    - On the SALES LEADER question, note the "Go to" section for **every** option, and the exact option text (this answers H-28 too).
    - For each target section, note which seller question it contains. MS Forms exports repeated titles in **form order**, with a numeric suffix:
 
@@ -766,10 +769,10 @@ Expected output under the rules above (`∅` = blank):
      | 3rd | `Seller Name2` / `…Address2` | 3 (K/L) |
 
    - Record the result in `teams.yaml` with `verified_by: form_branching` and the date.
-2. **Test submission (confirmation; only with your permission to submit to the live form).** Submit one response per SALES LEADER option with a clearly marked test client (e.g. surname `ZZTEST`). Export, check which slot columns filled, then delete the test responses.
+2. **Test submission: withdrawn (v0.6).** Not used. Tests use synthetic workbooks only.
 3. **Live data cross-check (supporting).** Optionally provide a read-only copy of the live MASTERLIST. A pre-flight report then counts SALES LEADER × filled slot. Every leader must appear in exactly one slot. Any leader in two slots is a contradiction to resolve before import.
 
-`teams.yaml` entries carry `slot`, `destination_label`, `verified_by` (`form_branching` | `test_submission` | `sample_only`) and `verified_on`. A **build-time gate** refuses to export any record whose leader entry is not `form_branching` or `test_submission`. Sample-only entries (CALOY, HD) are used in tests but are not exportable until verified.
+`teams.yaml` entries carry `slot`, `destination_label`, `verified_by` and `verified_on`. The allowed `verified_by` values are redefined in M.4. A **runtime gate** holds in Review (`UNVERIFIED_TEAM_SLOT`, ERROR) any record whose leader entry is not exportable. Sample-only entries (CALOY, HD) are used in tests but are not exportable until verified.
 
 ### J.3 `Question` (H-6)
 
@@ -816,20 +819,22 @@ Format, appended to REMARKS: `[<label> – Others] <text>`. Several entries, and
 ### J.6 Build gate
 
 BUILD may start once **all** of the following hold:
-1. H-2: every SALES LEADER that will be exported has a `teams.yaml` entry with `verified_by` ∈ {`form_branching`, `test_submission`}.
-2. H-28: each source leader label is confirmed as identical to a form option, or mapped to one.
-3. H-6: `Question` is verified, or you explicitly confirm that it stays unmapped (the build can proceed with Y always blank).
+1. **B1 / H-2:** an approved evidence route for team → slot (M.4). Teams without one are held in Review at runtime rather than blocking the build.
+2. **B2 / H-28:** approval of the SALES LEADER label policy (M.5).
+3. **B3 / H-6:** approval of the `Question` policy (M.5).
 4. H-1: the seller directory review is returned. Rows may stay unapproved; they fall back to the submitter e-mail.
 
 `Referral` / `Site Walk-in` (H-7) do not block the build. Their records stay in Review (`UNMAPPED_VALUE`, ERROR) and are never exported automatically until a mapping is approved.
 
 **Scope of the gate.** Gate items 1–3 block only the components that depend on them: team/slot resolution in `teams.yaml`, the `Question` column, and the final export. They do not block work on components that are independent of those decisions (reader, header matching, block detection, transforms, validation policy, de-duplication, ledger, audit). Implementation of any component still starts only after your explicit go-ahead.
 
-**Test submissions** (J.2 step 2) are **not authorised**. Verification uses read-only inspection of the form first.
+**Test submissions** are **not used** (v0.6). Verification relies on exported files and approved evidence only (M.4).
 
 ---
 
 ## K. Microsoft Form Verification Checklist (read-only) — v0.5
+
+> **v0.6: optional.** This checklist applies only if someone who owns or edits the MGM-AD form agrees to complete it. You can forward this section to them as is. Nothing in the parser depends on it. Without it, M.4 applies.
 
 Do this in the MGM-AD Microsoft Form's editor, without submitting any responses. Record the results in the table at the end. Before building, those results go into `teams.yaml` (labels and slots) and the H-6 mapping.
 
@@ -887,3 +892,91 @@ Do this in the MGM-AD Microsoft Form's editor, without submitting any responses.
 - Test fixtures are synthetic. Real workbook data is never committed.
 - Before each commit, the tracked tree is scanned against a term list built locally from the workbooks. The term list itself is never committed.
 - History was rewritten on 2026-10-28 to remove an unredacted fixture from earlier commits (see the delivery notes for any residual exposure).
+
+
+---
+
+## M. Access Model: Exported Files Only — v0.6
+
+### M.1 Requirement (H-29, approved)
+
+The parser works **entirely on files the user provides**:
+- **Source:** Google Sheets response exports, as `.xlsx` or `.csv`.
+- **Template:** the destination `FUEL (MGM-AD ADMIN) (2).xlsx`.
+- **Optional evidence:** further MS Forms exports of MASTERLIST.
+
+It needs no Google or Microsoft account, API, credentials, network connection, or access to any live form or sheet. Every input is a **static snapshot**: headers and values are inspected at runtime, and the approved mapping configuration is then applied. Nothing in the design calls out to, or waits on, an external system.
+
+### M.2 What changes in the design
+
+| Area | Before | v0.6 |
+|---|---|---|
+| Source input | `.xlsx` with a `MARF RAW` sheet | `.xlsx` **or** `.csv`. In an `.xlsx`, `MARF RAW` is used when present. Otherwise the sheet is chosen by **header signature** (`Timestamp` + `SALES LEADER` + at least one `Seller Name` block) and confirmed in the preview. A `.csv` is treated as a single response sheet |
+| `.csv` specifics | — | UTF-8 with or without BOM. Quoted multi-line cells supported. **All values arrive as text**, which suits mobile numbers. Timestamps are parsed with a configured format (Google exports use the sheet's locale, e.g. `M/D/YYYY H:MM:SS`). A day/month order that cannot be resolved → `AMBIGUOUS_DATE` (ERROR). The format is confirmed in the mapping preview from the first values |
+| Team sheets | Ignored | **Optional reference only.** If present, an audit comparison of their cached values against the parser's Leads Log view (case-insensitive, excluding SPECIFIC/DISTINCT, I.5 X7). Never required, never an input, formulas never evaluated |
+| Destination template | Header copied from the template | Unchanged. The template header row is also hashed and compared with the approved schema snapshot in config. A mismatch stops the run with a clear message. The live destination is never written |
+| New or changed exports | Mapping preview | Unchanged and mandatory: new, renamed or moved headers, new blocks and new form versions are shown as a diff against the saved profile. Ambiguous items must be confirmed before export |
+| Seller slots | Verified from the form | Export-supported or explicitly approved evidence only (M.4). Otherwise → Review |
+| Test data | Synthetic + golden run | Unchanged: synthetic workbooks, plus a local golden run on the provided v3.3 export. No live-form submissions |
+
+### M.3 What can and cannot be verified from the available files
+
+| Question | Answerable from exports? | Basis |
+|---|---|---|
+| Source structure, blocks, form versions, lead-source vocabulary | **Yes** | `MARF RAW` (sections A, C) |
+| Which client block a team fills in the **source** | **Yes** | A.3 |
+| Seller name ↔ submitter e-mail evidence | **Yes**, as evidence | J.1 draft directory (needs human approval) |
+| Destination schema, header text, formats | **Yes** | Template (section B) |
+| `Question1` = Showroom Walk-In | **Yes**, from sample rows | Approved |
+| Slot for TEAM CALOY / TEAM HD | **Partly**: 5 rows and 1 row | Sample only |
+| Slot for the six source teams (H-2) | **No** | No destination rows exist for them |
+| Whether the MS Form offers the six source leaders, and their exact wording (H-28) | **No** | No destination rows exist for them |
+| Meaning of `Question` (H-6) | **No** | Never populated in either file |
+| Destination option lists (full Lead Source / awareness vocab) | **Partly** | Only values seen in the 10 sample rows |
+
+### M.4 Alternatives that do not require form or live-sheet access
+
+`teams.yaml` → `verified_by` now accepts these **evidence types**. Each entry records which one applies and who approved it, and the audit Summary lists them.
+
+| Evidence type | What you would provide | Strength | Exportable? |
+|---|---|---|---|
+| `masterlist_export` | A fuller **exported copy** of the live MASTERLIST (any `.xlsx` downloaded from the MS Form or its Excel file) that contains rows for the team. The parser's pre-flight counts SALES LEADER × filled slot. The leader must appear in exactly **one** slot across ≥ 3 rows, with no contradictions | Strong (observed behaviour) | Yes |
+| `owner_confirmation` | A written statement (e-mail or screenshot) from whoever administers the MGM-AD form, giving each option's text and slot. Section K can be forwarded to them as the request | Strong (authoritative, second-hand) | Yes |
+| `business_rule` | An explicit decision **by you**, e.g. "all CSP-AD teams go to slot 1 (G/H)". Recorded as a business decision, not as a verified fact. The audit labels every affected record `SLOT_BY_BUSINESS_RULE` (INFO) | Policy, not verification | Yes, once approved |
+| `sample_only` | The 10-row destination sample (CALOY, HD) | Weak | **No** (fixtures only) unless upgraded by one of the above |
+| *(none)* | — | — | No → every record for that team is held in Review (`UNVERIFIED_TEAM_SLOT`) |
+
+**Consequence to be aware of:** with no evidence at all, all 3,064 current responses would be held in Review, because all of them belong to the six unverified teams. The parser would still run and audit correctly, but the import file would be empty.
+
+**H-28 labels without form access.** Either:
+- (a) write the source SALES LEADER text verbatim (H-21), accepting that it may not match the form's wording; or
+- (b) supply a label map (source label → destination label) taken from a MASTERLIST export or an owner confirmation.
+
+**H-6 `Question` without form access.** The source column it would map from (`If Corporate, please choose below:`) is empty in all 3,064 responses. A policy therefore resolves it safely: column Y is always written blank, and any future non-empty Corporate value → `UNMAPPED_COLUMN` (ERROR, Review). Nothing is guessed, and nothing is lost.
+
+### M.5 Remaining blocking decisions (exports-only)
+
+| # | Decision | Options | Recommendation |
+|---|---|---|---|
+| **B1** (H-2) | Evidence route for team → seller slot, per team | `masterlist_export` · `owner_confirmation` · `business_rule` · hold in Review | Ask for a **MASTERLIST export** first. If none exists for these teams, choose between a `business_rule` and holding records in Review. A rule makes the output usable now. Holding keeps it strictly verified but empty |
+| **B2** (H-28) | SALES LEADER label written to the destination | (a) source text verbatim · (b) label map from evidence | **(a)** now. Switch to (b) for any team where a MASTERLIST export or owner confirmation shows different wording |
+| **B3** (H-6) | `Question` (column Y) | (a) always blank, future Corporate values → Review · (b) wait for owner confirmation | **(a)**. Resolves the blocker without guessing. It can be revisited if evidence appears |
+
+**Not blocking:**
+- **H-1:** the directory review. Unapproved rows fall back to the submitter e-mail.
+- **H-7:** `Referral` and `Site Walk-in` stay in Review.
+- **Repository visibility / GitHub purge (L):** a repository-owner action, independent of the build.
+
+### M.6 Added tests
+
+| # | Case | Expected |
+|---|---|---|
+| T36 | `.csv` export of the synthetic fixture | Same records as the `.xlsx` fixture. Mobile values identical as text |
+| T37 | `.csv` with ambiguous `03/04/2026` timestamps and no confirmed format | `AMBIGUOUS_DATE` (ERROR). Nothing exported until the format is confirmed |
+| T38 | `.xlsx` without a `MARF RAW` sheet but with a matching header signature | Sheet proposed in the preview. Processing only after confirmation |
+| T39 | Workbook with only team sheets (no raw responses) | Stops: "no raw response sheet found". Derived sheets are never used as input |
+| T40 | Team with `verified_by: business_rule` | Exported, each record tagged `SLOT_BY_BUSINESS_RULE` (INFO), listed in the audit Summary |
+| T41 | Team with no evidence | All its records → Review `UNVERIFIED_TEAM_SLOT`. Reconciliation still balances |
+| T42 | MASTERLIST-export pre-flight shows a leader in two slots | Contradiction reported. Team not exportable until resolved |
+| T43 | Template header altered | Run stops with a schema-mismatch message. No output written |
+| T44 | Run with networking disabled | Completes normally (no external calls) |
