@@ -79,44 +79,121 @@ function busy(on, text) {
 }
 
 // ---------- files ----------
+const ROLE_LABEL = { source: "response export", template: "MASTERLIST template", sellers: "seller directory" };
 const dz = $("#dropzone");
 dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("over"); });
 dz.addEventListener("dragleave", () => dz.classList.remove("over"));
 dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("over"); addFiles([...e.dataTransfer.files]); });
 $("#file-input").addEventListener("change", (e) => { const files = [...e.target.files]; e.target.value = ""; addFiles(files); }); // copy: FileList is live
 
-async function addFiles(list) {
+// Every row is its own drop target and file picker, so a file can be placed explicitly.
+document.querySelectorAll(".file-row").forEach((row) => {
+  const role = row.dataset.role;
+  const input = row.querySelector("input[type=file]");
+  row.querySelector(".choose").addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { const files = [...input.files]; input.value = ""; if (files.length) addFiles(files.slice(0, 1), role); });
+  row.addEventListener("dragover", (e) => { e.preventDefault(); e.stopPropagation(); row.classList.add("over"); });
+  row.addEventListener("dragleave", () => row.classList.remove("over"));
+  row.addEventListener("drop", (e) => {
+    e.preventDefault(); e.stopPropagation(); row.classList.remove("over");
+    const files = [...e.dataTransfer.files];
+    const note = files.length > 1 ? `Only ${files[0].name} was used: drop one file per row, or drop several files on the large area above to place them automatically.` : null;
+    if (files.length) addFiles(files.slice(0, 1), role, note);
+  });
+  row.querySelector(".remove").addEventListener("click", () => { state.files[role] = null; renderFiles(); });
+});
+$("#btn-swap").addEventListener("click", () => {
+  [state.files.source, state.files.template] = [state.files.template, state.files.source];
+  renderFiles();
+});
+
+async function readAndClassify(f) {
+  const file = { name: f.name, buffer: await f.arrayBuffer() };
+  file.info = JSON.parse(await call("classify", { file }));
+  return file;
+}
+
+// Place files automatically (large drop area) or on the row they were dropped on (targetRole).
+async function addFiles(list, targetRole, firstNote) {
   clearAlert();
   await engineReadyPromise;
   busy(true, "Reading files…");
+  const notes = firstNote ? [firstNote] : [];
   try {
+    const files = [];
     for (const f of list) {
-      if (!/\.(xlsx|csv)$/i.test(f.name)) { showAlert("warn", `${f.name}: only .xlsx and .csv files are supported.`); continue; }
-      const file = { name: f.name, buffer: await f.arrayBuffer() };
-      const role = await call("classify", { file });
-      if (role.startsWith("error")) { showAlert("error", `${f.name} could not be read as a workbook (${role.slice(7)}).`); continue; }
-      state.files[role] = file;
+      if (!/\.(xlsx|csv)$/i.test(f.name)) { notes.push(`${f.name}: only .xlsx and .csv files are supported.`); continue; }
+      const file = await readAndClassify(f);
+      if (file.info.kind === "error") { notes.push(`${f.name} could not be read (${file.info.message}).`); continue; }
+      files.push(file);
+    }
+    if (targetRole) {
+      if (files[0]) state.files[targetRole] = files[0];
+    } else {
+      const placed = new Set();
+      const put = (role, file) => { state.files[role] = file; placed.add(role); };
+      const free = (role) => !placed.has(role);
+      // Recognised files first, then the rest into whichever main slot is still open.
+      const order = { sellers: 0, source: 1, template: 1, both: 2, unknown: 3 };
+      for (const file of files.sort((a, b) => order[a.info.kind] - order[b.info.kind])) {
+        const k = file.info.kind;
+        if (k === "sellers") { put("sellers", file); continue; }
+        let role = k === "source" || k === "template" ? k : null;
+        if (k === "both") role = free("source") ? "source" : "template";
+        if (!role || !free(role)) {
+          // Prefer an empty slot, then any slot this drop has not used yet.
+          const other = ["source", "template"].find((r) => r !== role && free(r) && !state.files[r])
+            || ["source", "template"].find((r) => r !== role && free(r));
+          if (!other) { notes.push(`${file.name} was not placed: both slots are already filled by this drop.`); continue; }
+          if (role) notes.push(`${file.name} also looks like a ${ROLE_LABEL[role]}; it was placed as the ${ROLE_LABEL[other]}. Use Swap if that is wrong.`);
+          role = other;
+        }
+        put(role, file);
+      }
     }
   } finally { busy(false); }
   state.flags = { sheet: "", accept_suggestions: false, ignore_unmapped: false };
   renderFiles();
+  if (notes.length) showAlert("warn", notes.join(" "));
 }
+
+function describe(role, file) {
+  const i = file.info || {};
+  if (role === "sellers") return i.kind === "sellers" ? ["ok", "Seller directory CSV recognised"] : ["warn", "Does not look like a seller directory (first column should be seller_name)."];
+  if (role === "source") {
+    if (i.source_sheet) return ["ok", `Response export recognised · sheet “${i.source_sheet}”`];
+    if (i.template_sheet) return ["err", "This looks like the MASTERLIST template, not a response export. Use Swap or choose another file."];
+    return ["warn", "Response headers (Timestamp, SALES LEADER, Seller Name) not found. The check will explain what is missing."];
+  }
+  if (i.template_sheet && i.template_exact) return ["ok", `MASTERLIST template recognised · sheet “${i.template_sheet}” · all 35 headers match`];
+  if (i.template_sheet) return ["err", `Sheet “${i.template_sheet}” looks like a MASTERLIST but its header differs from the approved 35 columns. The check will stop until the correct template is used.`];
+  if (i.source_sheet) return ["err", "This looks like a response export, not the template. Use Swap or choose another file."];
+  return ["warn", "MASTERLIST header not found in any sheet."];
+}
+
 function renderFiles() {
   document.querySelectorAll(".file-row").forEach((row) => {
-    const f = state.files[row.dataset.role];
+    const role = row.dataset.role;
+    const f = state.files[role];
     const name = row.querySelector(".fname");
-    name.textContent = f ? `${f.name} · ${(f.buffer.byteLength / 1024).toFixed(0)} KB` : "Not selected";
+    const note = row.querySelector(".fnote");
+    name.textContent = f ? `${f.name} · ${(f.buffer.byteLength / 1024).toFixed(0)} KB` : "Drop a file on this row or choose one";
     name.classList.toggle("muted", !f);
-    const rm = row.querySelector(".remove");
-    rm.classList.toggle("hidden", !f);
-    rm.onclick = () => { state.files[row.dataset.role] = null; renderFiles(); };
+    const [cls, text] = f ? describe(role, f) : ["", ""];
+    note.className = "fnote " + cls;
+    note.textContent = text;
+    row.querySelector(".remove").classList.toggle("hidden", !f);
+    row.querySelector(".choose").textContent = f ? "Replace" : "Choose file";
   });
+  $("#btn-swap").disabled = !(state.files.source || state.files.template);
   updateCheckButton();
 }
 function updateCheckButton() {
-  const ok = state.files.source && state.files.template;
-  $("#btn-check").disabled = !ok || !$("#engine").classList.contains("ready");
-  $("#check-hint").textContent = ok ? "Validation only: nothing is exported yet." : "Add the response export and the template.";
+  const both = state.files.source && state.files.template;
+  const wrong = ["source", "template"].some((r) => state.files[r] && describe(r, state.files[r])[0] === "err");
+  $("#btn-check").disabled = !both || wrong || !$("#engine").classList.contains("ready");
+  $("#check-hint").textContent = !both ? "Add the response export and the template."
+    : wrong ? "Fix the file marked in red first (Swap or Replace)." : "Validation only: nothing is exported yet.";
 }
 
 // ---------- running ----------

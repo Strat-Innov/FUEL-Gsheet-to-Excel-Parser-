@@ -147,19 +147,53 @@ def void_batch(batch_id: str) -> str:
 
 
 def classify(path: str) -> str:
-    """Tell the dropped files apart: MASTERLIST template, seller directory, or response export."""
-    p = Path(path)
-    if p.suffix.lower() == ".csv":
-        with open(p, encoding="utf-8-sig", errors="replace") as fh:
-            head = fh.readline().lower()
-        return "sellers" if head.startswith("seller_name") else "source"
+    """Identify a dropped file by its header rows (not by file or sheet name). Returns JSON.
+
+    kind: "source" (response export), "template" (MASTERLIST), "sellers" (seller directory CSV),
+    "both" (a workbook holding both), or "unknown".
+    """
+    import csv
+    import hashlib
+
     import openpyxl
+
+    from fuel_parser.config import load_profile
+    from fuel_parser.headers import match_key
+
+    profile = load_profile(APP / "config" / "mapping_profile.yaml")
+    src_keys = set(profile.source["signature_keys"])
+    tpl_keys = {"completion time", "client's surname", "seller name1", "lead source"}
+    digest = profile.dest["template_header_sha256"]
+    p = Path(path)
+    found = {"source_sheet": None, "template_sheet": None, "template_exact": False}
+
+    def inspect(name: str, header: list) -> None:
+        keys = {match_key(h) for h in header}
+        if src_keys <= keys and found["source_sheet"] is None:
+            found["source_sheet"] = name
+        if tpl_keys <= keys:
+            while header and header[-1] is None:
+                header.pop()
+            exact = hashlib.sha256("\x1f".join("" if v is None else str(v) for v in header).encode("utf-8")).hexdigest() == digest
+            if found["template_sheet"] is None or (exact and not found["template_exact"]):
+                found["template_sheet"], found["template_exact"] = name, exact
+
     try:
-        wb = openpyxl.load_workbook(p, read_only=True)
-    except Exception as e:  # not a readable workbook
-        return f"error: {type(e).__name__}"
-    try:
-        names = set(wb.sheetnames)
-    finally:
-        wb.close()
-    return "template" if "MASTERLIST" in names else "source"
+        if p.suffix.lower() == ".csv":
+            with open(p, encoding="utf-8-sig", errors="replace", newline="") as fh:
+                header = next(csv.reader(fh), [])
+            if header and match_key(header[0]) == "seller_name":
+                return json.dumps({"kind": "sellers", **found})
+            inspect(p.stem, header)
+        else:
+            wb = openpyxl.load_workbook(p, read_only=True)
+            try:
+                for name in wb.sheetnames:
+                    inspect(name, list(next(wb[name].iter_rows(min_row=1, max_row=1, values_only=True), ())))
+            finally:
+                wb.close()
+    except Exception as e:  # unreadable file: report the type only, never content
+        return json.dumps({"kind": "error", "message": type(e).__name__, **found})
+    kind = ("both" if found["source_sheet"] and found["template_sheet"] else "source" if found["source_sheet"]
+            else "template" if found["template_sheet"] else "unknown")
+    return json.dumps({"kind": kind, **found})

@@ -44,13 +44,29 @@
       <input type="file" id="file-input" accept=".xlsx,.csv" multiple hidden>
       <svg viewBox="0 0 24 24"><path d="M12 15V3m0 0L7 8m5-5 5 5M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
       <strong>Drop the response export and the MASTERLIST template here</strong>
-      <span>or click to browse · several files at once · .xlsx or .csv · optional reviewed seller directory (.csv)</span>
+      <span>or click to browse · several files at once · each file is placed by reading its headers — or drop it on a specific row below</span>
     </label>
     <section class="card" id="files-card">
       <h2>Files</h2>
-      <div class="file-row" data-role="source"><span class="role">Response export</span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
-      <div class="file-row" data-role="template"><span class="role">MASTERLIST template</span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
-      <div class="file-row" data-role="sellers"><span class="role">Seller directory <em>(optional)</em></span><span class="fname muted">Not selected</span><button class="link remove hidden">Remove</button></div>
+      <div class="file-row" data-role="source">
+        <span class="role">Response export</span>
+        <div class="fbody"><span class="fname muted">Drop a file on this row or choose one</span><span class="fnote"></span></div>
+        <div class="factions"><button class="btn small choose">Choose file</button><button class="link remove hidden">Remove</button></div>
+        <input type="file" accept=".xlsx,.csv" hidden>
+      </div>
+      <div class="swap-row"><button class="link" id="btn-swap" disabled>⇅ Swap export and template</button></div>
+      <div class="file-row" data-role="template">
+        <span class="role">MASTERLIST template</span>
+        <div class="fbody"><span class="fname muted">Drop a file on this row or choose one</span><span class="fnote"></span></div>
+        <div class="factions"><button class="btn small choose">Choose file</button><button class="link remove hidden">Remove</button></div>
+        <input type="file" accept=".xlsx,.csv" hidden>
+      </div>
+      <div class="file-row" data-role="sellers">
+        <span class="role">Seller directory <em>(optional)</em></span>
+        <div class="fbody"><span class="fname muted">Drop a file on this row or choose one</span><span class="fnote"></span></div>
+        <div class="factions"><button class="btn small choose">Choose file</button><button class="link remove hidden">Remove</button></div>
+        <input type="file" accept=".csv" hidden>
+      </div>
       <details class="options">
         <summary>Advanced options</summary>
         <label>Response sheet name <input id="opt-sheet" placeholder="Detected automatically (MARF RAW)"></label>

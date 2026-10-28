@@ -439,3 +439,16 @@ def test_config_error_for_unknown_policy_code(env):
     p.write_text(p.read_text(encoding="utf-8").replace("  SLOT_UNRESOLVED:", "  SLOT_UNRESOLVED_X:"), encoding="utf-8")
     with pytest.raises(ConfigError, match="SLOT_UNRESOLVED"):
         env.run(env.source([response(leader="TEAM GAMMA (AAD: Q)")]))
+
+
+def test_template_found_by_header_when_sheet_is_renamed(env):
+    wb = openpyxl.Workbook()
+    wb.active.title = "Notes"
+    wb.active.append(["not the template"])
+    ws = wb.create_sheet("Sheet1")
+    ws.append(TEMPLATE_HEADERS)
+    p = env.root / "renamed_template.xlsx"
+    wb.save(p)
+    r = env.run(env.source([response()]), template=p)
+    out = openpyxl.load_workbook(r.outputs["import"])
+    assert out.sheetnames == ["MASTERLIST"] and [c.value for c in out["MASTERLIST"][1]] == TEMPLATE_HEADERS

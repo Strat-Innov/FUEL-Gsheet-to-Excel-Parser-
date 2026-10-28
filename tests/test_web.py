@@ -78,3 +78,29 @@ def test_vendored_wheels_match_pinned_hashes():
             "et_xmlfile-2.0.0-py3-none-any.whl": "7a91720bc756843502c3b7504c77b8fe44217c85c537d85037f0f536151b2caa"}
     for name, digest in pins.items():
         assert hashlib.sha256((PUBLIC / "wheels" / name).read_bytes()).hexdigest() == digest
+
+
+def _bridge():
+    import sys
+    sys.path.insert(0, str(ROOT / "web"))
+    import bridge
+    bridge.APP = ROOT
+    return bridge
+
+
+def test_classify_reads_headers_not_names(tmp_path):
+    import json
+    import openpyxl
+    from tests.fixtures.builders import TEMPLATE_HEADERS, response, write_source, write_template
+    b = _bridge()
+    write_source(tmp_path / "Sales FUEL Template.xlsx", [response()])  # misleading file name
+    write_template(tmp_path / "responses.xlsx")
+    wb = openpyxl.Workbook(); wb.active.title = "Sheet1"; wb.active.append(TEMPLATE_HEADERS); wb.save(tmp_path / "renamed.xlsx")
+    wb = openpyxl.Workbook(); wb.active.append(TEMPLATE_HEADERS[:-1] + ["changed"]); wb.save(tmp_path / "almost.xlsx")
+    (tmp_path / "dir.csv").write_text("seller_name,proposed_email\n", encoding="utf-8")
+    got = {n: json.loads(b.classify(str(tmp_path / n))) for n in ("Sales FUEL Template.xlsx", "responses.xlsx", "renamed.xlsx", "almost.xlsx", "dir.csv")}
+    assert got["Sales FUEL Template.xlsx"]["kind"] == "source"
+    assert got["responses.xlsx"]["kind"] == "template" and got["responses.xlsx"]["template_exact"]
+    assert got["renamed.xlsx"]["template_sheet"] == "Sheet1" and got["renamed.xlsx"]["template_exact"]
+    assert got["almost.xlsx"]["kind"] == "template" and not got["almost.xlsx"]["template_exact"]
+    assert got["dir.csv"]["kind"] == "sellers"
