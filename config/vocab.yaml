@@ -1,0 +1,61 @@
+# Known option lists (union of the Google and Microsoft form vocabularies, I.4) and
+# approved value rules. Unknown values are kept and flagged, never corrected (H-10).
+projects:
+  - "1001 Parkway"
+  - "Botanika"
+  - "Brentville"
+  - "Golf Ridge"
+  - "Studio N"
+  - "The Levels"
+  - "Timberland Heights"
+  - "Commercial Lot - Filinvest City"
+  - "Commercial Lot - Daang Hari"
+  - "Commercial Lot - The Village Front"
+  - "Commercial Lot - City di Mare (Cebu)"
+
+awareness:
+  - "Not Applicable"
+  - "Word of Mouth"
+  - "Social Media (Facebook, Instagram, etc)"
+  - "Sales Materials - Brochure / Flyers"
+  - "Events"
+  - "Billboard / Lamp Post Banners"
+  - "Email / Online Newsletter"
+  - "Mall Kiosk / Booths"
+  - "Print Ad"
+  - "Print Ads"
+  - "Google / Youtube Ads"
+  - "Roadshow"
+
+# Valid destination Lead Source values.
+lead_sources:
+  - "Booth Manning"
+  - "Buyer Referral"
+  - "Corporate"
+  - "Digital - Official Social Media"
+  - "Digital - Official Website"
+  - "Digital - Seller Social Media"
+  - "Marketing Partner"
+  - "Others"
+  - "Own Source"
+  - "Repeat Buyer"
+  - "Roadshow"
+  - "Saturation"
+  - "Showroom Walk-In"
+  - "Sponsorship Event"
+
+# Approved v1 -> v2 lead-source translation (H-7, J.4). Values not listed here and not in
+# lead_sources (e.g. "Referral", "Site Walk-in") are held as UNMAPPED_VALUE.
+lead_source_v1:
+  "Ownsource": {to: "Own Source"}
+  "Booth": {to: "Booth Manning"}
+  "Digital":
+    by_detail: digital_v1
+    when:
+      "Seller Facebook Page": {to: "Digital - Seller Social Media", detail_to: digital_seller}
+      "Facebook Marketplace": {to: "Digital - Seller Social Media", detail_to: digital_seller}
+      "Tiktok Inquiry": {to: "Digital - Seller Social Media", detail_to: digital_seller}
+      "Project's Main Page": {to: "Digital - Official Social Media", detail_to: digital_official}
+
+# Placeholder values written as blank in client fields (H-11).
+null_tokens: ["N/A", "NA", "Na", "N/a", "n/a", "None", "-"]

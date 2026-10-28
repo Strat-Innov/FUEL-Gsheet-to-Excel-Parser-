@@ -5,7 +5,7 @@
 | Phase | DESIGN (no production code) |
 | Source analysed | `FUEL RESP (CSP-AD MARF) v3.3.xlsx` (Google Forms response export) |
 | Destination analysed | `FUEL (MGM-AD ADMIN) (2).xlsx` → sheet `MASTERLIST` (Microsoft Forms export) |
-| Status | **v0.7: all design policies decided (B1–B3 approved as policies). Awaiting your approval of the revised design before implementation. The six source teams' slot assignments remain unassigned by default (N.4)** |
+| Status | **v0.7 approved and implemented (Section O). The six source teams remain UNRESOLVED by default; the first run exports 0 records with a complete audit** |
 
 > This document contains structure, counts and rules only. It holds no client records, phone numbers or e-mail addresses. Both workbooks were opened read-only, and neither was modified.
 
@@ -1094,3 +1094,32 @@ The headline also states counts per status, e.g. `Exported: 0 verified · N owne
 | T51 | Non-empty Corporate value in a future export | Column Y blank. `UNMAPPED_COLUMN` ERROR. Record held |
 | T52 | Golden run, v3.3, shipped config | 3,064 read · 0 exported · 3,064 `SLOT_UNRESOLVED` · balanced |
 | T53 | Golden run, v3.3, a test config marking all six teams `OWNER_APPROVED_UNVERIFIED` (test-only file, not shipped) | Exported = 3,064 − ERROR records − held duplicates (2). Known ERROR sources from profiling: `Referral` (20), `Site Walk-in` (1), v1 `Digital` = `Others` (2). Any others are itemised by code. The exact figures are fixed as the golden baseline at the first run. Every exported record carries `SLOT_OWNER_APPROVED_UNVERIFIED` |
+
+
+---
+
+## O. Implementation Notes — v0.7 build
+
+The build follows v0.7. These are the implementation-level decisions and corrections made during the build. None of
+them changes an approved mapping or policy.
+
+| # | Item | What was done | Why |
+|---|---|---|---|
+| O-1 | Team matching key | `teams.yaml` uses `label_prefix` (e.g. `TEAM LESLIE (AAD:`), matched against the upper-cased, whitespace-collapsed source label. A label matching two entries is a configuration error | Keeps leader surnames out of the repository (L). B2 is unchanged: the destination still receives the full source label verbatim unless `destination_label` is set |
+| O-2 | `fixture_slot` | The sample-only slots for TEAM CALOY / TEAM HD are stored as `fixture_slot`, so `slot` stays `null` for every `UNRESOLVED` entry (N.1 rule) | Resolves the N.1 table's "(1)/(2) for fixtures" against the "UNRESOLVED must have no slot" rule |
+| O-3 | `CLIENT_NAME_MISSING` (ERROR) | Added to the validation policy for C rows 13–14 ("Required") | C required a code that D.8 had not listed |
+| O-4 | Numeric cells in text fields | Rendered as their digits (`9XXXXXXXXX`, not `9XXXXXXXXX.0`) | Data preservation (D.6). Found by the team-sheet cross-check: 4 remarks were numeric cells |
+| O-5 | "Others" columns | Resolved as the column **immediately after** the anchor question (F.3 `occurrence_after`). A changed layout leaves the column unmapped and shown in the preview | Safer than counting occurrences |
+| O-6 | Response with no client block | Logged as a response-level `NO_CLIENT_DATA` row in Review and RowLog. Reconciliation checks responses and records separately | Every response is accounted for exactly once |
+| O-7 | `expected_blocks` consistency check (D.1 step 3, optional) | **Not implemented** | Optional in the design; slots never depend on source blocks |
+| O-8 | Team-sheet cross-check (M.2) | Implemented in the audit (`TeamSheetCheck`). Matched on timestamp (±1 s: team sheets store float day serials) + surname | Reference only, never an input |
+
+**Golden-run figures corrected** (G and N.6 quoted profiling estimates):
+
+| Figure | Design estimate | Actual (approved rules) | Reason |
+|---|---|---|---|
+| `PROBABLE_DUPLICATE` | 2 pairs | **0** | Both pairs differ in Source of Awareness, so they are not identical under D.4 tier D2 ("all mapped fields except timestamps/Id"). Each pair is still flagged by `POSSIBLE_DUPLICATE_CLIENT` |
+| `POSSIBLE_DUPLICATE_CLIENT` | 38 groups / 77 rows | **71 records** | The profiling key grouped blank mobiles. D3 requires a mobile number |
+| T52 (shipped config) | 3,064 read · 0 exported · 3,064 held | **Same** | — |
+| T53 (test-only, all six teams owner-approved) | 3,064 − errors − 2 duplicates | **3,020 exported · 44 held** (23 `UNMAPPED_VALUE` legacy values, 21 `CLIENT_NAME_MISSING` from placeholder names) · 0 duplicates | As above |
+| Team-sheet cross-check | — | **3,044 rows matched, 0 field mismatches** across 14 compared fields | Independent check of the transformation |

@@ -1,0 +1,37 @@
+# Severity per issue code (D.8, N.2). ERROR = held in Review only; HELD = duplicate held;
+# WARNING = exported and listed in Review; INFO = audit log only.
+# `action` is the reviewer-facing instruction shown in the Review report.
+codes:
+  SLOT_UNRESOLVED: {severity: ERROR, action: "Add a VERIFIED or OWNER_APPROVED_UNVERIFIED entry for this SALES LEADER in config/teams.yaml, then re-run."}
+  SLOT_OWNER_APPROVED_UNVERIFIED: {severity: WARNING, action: "Exported under an owner-approved, unverified slot assumption. Confirm when evidence is available."}
+  SELLER_SLOT_MISMATCH: {severity: ERROR, action: "Seller data is in a different slot than configured for this SALES LEADER. Check the team mapping; values were not moved."}
+  SELLER_NAME_MISSING: {severity: ERROR, action: "Add the seller name in the source export or exclude the response."}
+  CLIENT_NAME_MISSING: {severity: ERROR, action: "Client surname or first name is blank. Correct the export."}
+  SELLER_EMAIL_MISSING: {severity: WARNING, action: "No seller e-mail available. Add the seller to the seller directory."}
+  SELLER_EMAIL_FROM_SUBMITTER: {severity: INFO, action: ""}
+  SUBMITTER_NOT_SELLER: {severity: WARNING, action: "Submitting account differs from the approved directory e-mail. Directory e-mail was used."}
+  MISSING_TIMESTAMP: {severity: ERROR, action: "Source timestamp is blank. Correct the export."}
+  INVALID_DATE: {severity: ERROR, action: "Timestamp could not be read. Correct the export or confirm the date format."}
+  AMBIGUOUS_DATE: {severity: ERROR, action: "Day/month order is ambiguous. Re-run with --timestamp-format set."}
+  MULTI_BLOCK_RESPONSE: {severity: ERROR, action: "Response fills more than one client block. Confirm which client(s) are real."}
+  NO_CLIENT_DATA: {severity: ERROR, action: "Response has no client data. Confirm and exclude, or correct the export."}
+  UNMAPPED_VALUE: {severity: ERROR, action: "Value has no approved destination mapping. Approve a mapping in config/vocab.yaml, then re-run."}
+  UNMAPPED_COLUMN: {severity: ERROR, action: "Source has a value in a field with no approved destination column."}
+  MISSING_LEAD_SOURCE: {severity: ERROR, action: "Lead Source is blank in the source."}
+  CONFLICTING_SOURCE_VALUES: {severity: ERROR, action: "Two source columns for the same field both hold values. Confirm which is correct."}
+  PROBABLE_DUPLICATE: {severity: HELD, action: "Same content as an earlier record. Release only if it is a genuine separate lead."}
+  POSSIBLE_DUPLICATE_CLIENT: {severity: WARNING, action: "Same client (name + mobile) appears more than once. Check for re-registration."}
+  MOBILE_FORMAT_UNEXPECTED: {severity: WARNING, action: "Mobile is not 09XXXXXXXXX or +639XXXXXXXXX. Value kept as received."}
+  MOBILE_WAS_NUMERIC: {severity: WARNING, action: "Mobile was stored as a number; a leading 0 may have been lost upstream."}
+  MOBILE_MISSING: {severity: WARNING, action: "Mobile is blank."}
+  INVALID_EMAIL: {severity: WARNING, action: "E-mail syntax is invalid. Value kept as received."}
+  ORPHAN_DETAIL: {severity: WARNING, action: "A conditional detail is filled that does not belong to the selected Lead Source."}
+  ORPHAN_OTHERS_TEXT: {severity: WARNING, action: "'Others' text present but its question was not answered 'Others'. Text kept in REMARKS."}
+  UNKNOWN_OPTION: {severity: WARNING, action: "Source of Awareness value is not a known option. Value kept."}
+  UNKNOWN_PROJECT: {severity: WARNING, action: "Project is not in the known project list. Value kept."}
+  MULTI_FIRST_CHOICE: {severity: WARNING, action: "More than one first-choice project. All kept."}
+  SECOND_INCLUDES_FIRST: {severity: INFO, action: ""}
+  WHITESPACE_TRIMMED: {severity: INFO, action: ""}
+  NULL_TOKEN_BLANKED: {severity: INFO, action: ""}
+  FORMULA_TEXT_ESCAPED: {severity: INFO, action: ""}
+  LEAD_SOURCE_TRANSLATED: {severity: INFO, action: ""}

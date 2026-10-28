@@ -1,0 +1,21 @@
+# SALES LEADER -> seller slot (design N.1). Parser code contains no team names or slots.
+#
+# status:
+#   VERIFIED                   exported; needs evidence_type (masterlist_export|owner_confirmation) and evidence_ref
+#   OWNER_APPROVED_UNVERIFIED  exported with a WARNING; needs approved_by and approved_on
+#   UNRESOLVED                 not exported; slot must be null
+# destination_label: optional; when set it replaces the source label (B2). Otherwise the label is kept verbatim.
+# fixture_slot: sample-only observation used by tests; never used for export.
+#
+# Labels are compared upper-cased with whitespace collapsed.
+# Leader surnames are not stored here: `label_prefix` matches the start of the normalised source
+# label (e.g. "TEAM LESLIE (AAD:"). A label matching more than one entry is a configuration error.
+teams:
+  - {label_prefix: "TEAM LESLIE (AAD:", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "TEAM FERDINAND (AAD:", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "TEAM BERNADETTE (AAD:", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "AM: JESSA", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "TEAM CHRISTINE (AAD:", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "TEAM RALPH (AAD:", slot: null, status: UNRESOLVED, evidence_type: none}
+  - {label_prefix: "TEAM CALOY (AAD:", slot: null, fixture_slot: 1, status: UNRESOLVED, evidence_type: sample_only}
+  - {label_prefix: "TEAM HD (AAD:", slot: null, fixture_slot: 2, status: UNRESOLVED, evidence_type: sample_only}

@@ -1,8 +1,17 @@
+# Real data and generated outputs are never committed.
 *.xlsx
-*.sqlite
-output/
-__pycache__/
-.venv/
-config/sellers.yaml
-config/teams.local.yaml
+*.xls
 *.csv
+*.sqlite
+*.sqlite-journal
+output/
+profiles/
+config/sellers.yaml
+config/sellers.csv
+config/teams.local.yaml
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+*.egg-info/

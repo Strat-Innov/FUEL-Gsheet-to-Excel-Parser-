@@ -1,0 +1,130 @@
+# FUEL MARF -> MASTERLIST mapping profile (design v0.7, sections C, J, M, N).
+# Matching uses normalised header keys (fuel_parser.headers.match_key), never column letters.
+profile_id: marf-v3
+source:
+  preferred_sheet: "MARF RAW"
+  header_row: 1
+  # Header signature used to pick a sheet when the preferred one is absent (M.2).
+  signature_keys: ["timestamp", "sales leader", "seller name"]
+
+  response_fields:
+    timestamp: ["timestamp"]
+    submitter_email: ["email address"]
+    sales_leader: ["sales leader"]
+    lead_source: ["lead source"]
+    awareness: ["source of awareness"]
+
+  # A client block starts at each `seller name` header and holds these 10 keys (D.1).
+  block:
+    start_key: "seller name"
+    fields:
+      seller_name: "seller name"
+      surname: "client's surname"
+      first_name: "client's first name"
+      middle_name: "client's middle name"
+      mobile: "mobile no. (client)"
+      client_email: "email address (client)"
+      residence: "residence address (client)"
+      project_first: "project of interest (first choice)"
+      project_second: "project of interest (second choice)"
+      remarks: "remarks"
+
+  # Response-level conditional details. Several aliases = v2 and v1 wording of the same question.
+  details:
+    booth: ["if booth, please choose which booth location below", "if booth, please specify booth location"]
+    referrer: ["name of existing buyer who referred the client to you"]
+    corporate: ["if corporate, please choose below"]
+    digital_official: ["if digital - official social media, please choose below"]
+    digital_seller: ["if digital - seller social media, please choose below"]
+    digital_v1: ["digital"]
+    own_source: ["if own source, please choose below", "own source"]
+    referral_v1: ["referral"]
+    repeat_buyer: ["if repeat buyer, please choose from the listed projects below", "projects owned/bought by client"]
+    roadshow: ["if roadshow, please specify below the name and date of roadshow event (e.g. filinvest alabang roadshow - january 1, 2026)"]
+    saturation: ["if saturation, please specify exact location below", "if saturation, please specify location"]
+    showroom: ["if showroom walk-in, please specify which showroom below"]
+    sponsorship:
+      - "if sponsorship event, please specify below the name and date of event (e.g. cardiologist conference 2026 - january 1, 2026)"
+      - "if sponsorship event, please specify name of event & date (e.g. cardiologist conference 2026 - january 1, 2026)"
+    seller_fb_page: ["if digital - seller facebook page, please choose below", "seller facebook page"]
+
+  # "Others, please specify" columns share a header, so each is resolved as the column
+  # immediately after its anchor question (F.3), then checked against its parent (J.5).
+  others:
+    - {id: others_corporate, key: "if others, please specify below", after: "if corporate, please choose below", label: "Corporate", parent: corporate}
+    - {id: others_digital_seller, key: "if others, please specify below", after: "if digital - seller social media, please choose below", label: "Digital - Seller Social Media", parent: digital_seller}
+    - {id: others_own_source, key: "if others, please specify below", after: "if own source, please choose below", label: "Own Source", parent: own_source}
+    - {id: others_repeat_buyer, key: "if others, please specify below", after: "if repeat buyer, please choose from the listed projects below", label: "Repeat Buyer", parent: repeat_buyer}
+    - {id: others_lead_source, key: "if others, please specify below", after: "if sponsorship event, please specify below the name and date of event (e.g. cardiologist conference 2026 - january 1, 2026)", label: "Lead Source", parent: lead_source}
+    - {id: others_own_source_v1, key: "if others, please specify", after: "own source", label: "Own Source", parent: own_source}
+    - {id: others_referral_v1, key: "if others, please specify", after: "referral", label: "Referral", parent: referral_v1}
+    - {id: others_digital_v1, key: "if others, please specify", after: "digital", label: "Digital", parent: digital_v1}
+    - {id: others_repeat_project_v1, key: "if others, please specify project", after: "projects owned/bought by client", label: "Repeat Buyer", parent: repeat_buyer}
+    - {id: others_lead_source_v1, key: "if others, please specify", after: "if others, please specify project", label: "Lead Source", parent: lead_source}
+
+destination:
+  sheet: "MASTERLIST"
+  # sha256 of the exact template header row (cells joined by U+001F). A mismatch stops the run (M.2).
+  template_header_sha256: "0b78ee85f80e91820144927e0783a6c0513cce16e652add0db4993e8c3688c0d"
+  # Field id per destination column, in template order (35 columns, section B).
+  columns:
+    - id
+    - start_time
+    - completion_time
+    - email
+    - name
+    - sales_leader
+    - seller_name_1
+    - seller_email_1
+    - seller_name_2
+    - seller_email_2
+    - seller_name_3
+    - seller_email_3
+    - surname
+    - first_name
+    - middle_name
+    - mobile
+    - client_email
+    - residence
+    - project_first
+    - project_second
+    - remarks
+    - lead_source
+    - booth
+    - referrer
+    - question
+    - digital_official
+    - digital_seller
+    - own_source
+    - repeat_buyer
+    - roadshow
+    - saturation
+    - showroom
+    - sponsorship
+    - awareness
+    - seller_fb_page
+  datetime_columns: [start_time, completion_time]
+  datetime_format: "m/d/yy h:mm"
+
+# Lead Source -> the one detail column that feeds SPECIFIC LEAD SOURCE (I.3).
+lead_source_detail:
+  "Booth Manning": booth
+  "Buyer Referral": referrer
+  "Corporate": question
+  "Digital - Official Social Media": digital_official
+  "Digital - Seller Social Media": digital_seller
+  "Own Source": own_source
+  "Repeat Buyer": repeat_buyer
+  "Roadshow": roadshow
+  "Saturation": saturation
+  "Showroom Walk-In": showroom
+  "Sponsorship Event": sponsorship
+
+# Second-level details that legitimately accompany a Lead Source (not orphans).
+lead_source_secondary:
+  "Digital - Seller Social Media": [seller_fb_page]
+
+leads_log:
+  # Exact team-sheet headers, trailing spaces included (I.1).
+  headers: ["TIMESTAMP ", "SELLER EMAIL ADDRESS", "AAD", "AS", "SURNAME (CLIENT)", "FIRST NAME (CLIENT)", "MIDDLE NAME (CLIENT)", "MOBILE NO. ", "EMAIL ADDRESS", "RESIDENCE ADDRESS", "PROJECT (FIRST CHOICE)", "PROJECT (SECOND CHOICE)", "REMARKS", "LEAD SOURCE ", "SPECIFIC LEAD SOURCE", "LEAD SOURCE (DISTINCT)", "SOURCE OF AWARENESS"]
+  timestamp_format: "mmm/dd/yyyy hh:mm:ss"

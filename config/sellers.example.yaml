@@ -1,0 +1,6 @@
+# Example seller directory (fake values). The real directory is config/sellers.yaml or
+# config/sellers.csv (the reviewed draft from `fuel-parser draft-directory`); both are git-ignored.
+# Only rows with status APPROVED are used (J.1).
+sellers:
+  - {seller_name: "AS: Example Seller", email: "example.seller@example.com", status: APPROVED}
+  - {seller_name: "AS: Another Seller", email: "another@example.com", status: REJECTED}

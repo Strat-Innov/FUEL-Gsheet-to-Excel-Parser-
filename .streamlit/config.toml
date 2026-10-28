@@ -1,0 +1,7 @@
+# Local-only UI: bind to this computer and send no usage statistics (design R14).
+[server]
+address = "localhost"
+headless = true
+
+[browser]
+gatherUsageStats = false
