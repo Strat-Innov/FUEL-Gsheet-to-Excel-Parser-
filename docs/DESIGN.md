@@ -1,11 +1,11 @@
-# FUEL Response Parser — Design Specification (v0.6, for approval)
+# FUEL Response Parser — Design Specification (v0.7, for approval)
 
 | Item | Value |
 |---|---|
 | Phase | DESIGN (no production code) |
 | Source analysed | `FUEL RESP (CSP-AD MARF) v3.3.xlsx` (Google Forms response export) |
 | Destination analysed | `FUEL (MGM-AD ADMIN) (2).xlsx` → sheet `MASTERLIST` (Microsoft Forms export) |
-| Status | **v0.6: exports-only access model (Section M). Blocked on B1 (seller-slot evidence) and B2/B3 policy approvals. See M.5** |
+| Status | **v0.7: all design policies decided (B1–B3 approved as policies). Awaiting your approval of the revised design before implementation. The six source teams' slot assignments remain unassigned by default (N.4)** |
 
 > This document contains structure, counts and rules only. It holds no client records, phone numbers or e-mail addresses. Both workbooks were opened read-only, and neither was modified.
 
@@ -501,11 +501,11 @@ every source row       appears exactly once in RowLog
 | # | Topic | Status |
 |---|---|---|
 | H-1 | Seller e-mail source | **Approved: option (b).** A directory with submitter fallback and a mismatch warning. The **draft directory is under review** (J.1). It is not used until reviewed |
-| H-2 | Team → seller slot mapping | **OPEN: blocking → B1** (M.5). The rule is approved. Only export-supported or approved evidence counts. Unsupported teams → Review |
+| H-2 | Team → seller slot mapping | **Policy approved (B1, v0.7):** a mapping is `VERIFIED` or `OWNER_APPROVED_UNVERIFIED` in `teams.yaml`. Teams without one are `UNRESOLVED` and held in Review. **No mapping exists yet for the six source teams** (N.1) |
 | H-3 | Destination Email / Name | **Approved**: Email = submitter e-mail. Name blank |
 | H-4 | Start time | **Approved**: copy of the source Timestamp |
 | H-5 | Id sequence | **Approved**: continue from the last Id you enter from the live MASTERLIST |
-| H-6 | Meaning of `Question` / `Question1` | `Question1` = Showroom Walk-In detail: **approved**. `Question`: **OPEN → B3** (M.5). Cannot be verified from the exports |
+| H-6 | Meaning of `Question` / `Question1` | `Question1` = Showroom Walk-In detail: **approved**. `Question`: **approved policy (B3)**: always blank. The available exports contain no values for it (N.3) |
 | H-7 | v1 → v2 lead-source translation | **Approved** for the four translations in J.4. `Referral` and `Site Walk-in` stay **OPEN**, and those records go to Review (`UNMAPPED_VALUE`, ERROR) |
 | H-8 | "Others, please specify" text | **Approved: option (a)**, appended to REMARKS with the originating-question label (J.5) |
 | H-9 – H-12, H-14 – H-21 | Defaults | Accepted as recommended (no objection raised) |
@@ -518,8 +518,9 @@ every source row       appears exactly once in RowLog
 | H-25 | Trim leading/trailing whitespace, logged | **Approved** |
 | H-26 | (v0.2 "every flag → review") | **Withdrawn**, replaced by the D.8 validation policy |
 | H-27 | 17-column Leads Log as an optional separate output | **Approved** |
-| H-28 | Source SALES LEADER labels vs the MS Form's SALES LEADER options | **OPEN → B2** (M.5). Cannot be verified from the exports |
+| H-28 | SALES LEADER label written to the destination | **Approved (B2):** source label verbatim, unless an explicit label mapping is approved in `teams.yaml` |
 | H-29 | Access model: user-provided `.xlsx`/`.csv` exports only | **Approved** (Section M) |
+| H-30 | Mapping status model (`VERIFIED` / `OWNER_APPROVED_UNVERIFIED` / `UNRESOLVED`) | **Approved** (N.1) |
 
 ### Blocking (the build needs an answer)
 
@@ -891,7 +892,11 @@ Do this in the MGM-AD Microsoft Form's editor, without submitting any responses.
 - The design uses only ‹placeholders› for names and e-mails. Team labels appear as *first-name team names* with the leader's full name redacted (`TEAM LESLIE (AAD: …)`). They are organisational labels needed for configuration.
 - Test fixtures are synthetic. Real workbook data is never committed.
 - Before each commit, the tracked tree is scanned against a term list built locally from the workbooks. The term list itself is never committed.
-- History was rewritten on 2026-10-28 to remove an unredacted fixture from earlier commits (see the delivery notes for any residual exposure).
+- History was rewritten on 2026-10-28 to remove an unredacted fixture from earlier commits.
+- **Historical exposure status: OPEN.** A clean scan of the current branch does **not** resolve it. The repository is public. The pre-rewrite commits remain retrievable from GitHub by commit ID, and may persist in clones, forks, caches or archives made while they were public. Remediation is a repository-owner action, tracked separately from parser functionality:
+  - (1) make the repository private;
+  - (2) ask GitHub Support to purge cached views and unreferenced commits;
+  - (3) treat the sample rows' names and e-mails as exposed.
 
 
 ---
@@ -936,6 +941,8 @@ It needs no Google or Microsoft account, API, credentials, network connection, o
 
 ### M.4 Alternatives that do not require form or live-sheet access
 
+> **v0.7:** each evidence type below now resolves to a **mapping status** (N.1). `masterlist_export` and `owner_confirmation` → `VERIFIED`. `business_rule` → `OWNER_APPROVED_UNVERIFIED`. `sample_only` or no evidence → `UNRESOLVED`. The record codes `SLOT_BY_BUSINESS_RULE` and `UNVERIFIED_TEAM_SLOT` are replaced by those in N.2.
+
 `teams.yaml` → `verified_by` now accepts these **evidence types**. Each entry records which one applies and who approved it, and the audit Summary lists them.
 
 | Evidence type | What you would provide | Strength | Exportable? |
@@ -954,7 +961,7 @@ It needs no Google or Microsoft account, API, credentials, network connection, o
 
 **H-6 `Question` without form access.** The source column it would map from (`If Corporate, please choose below:`) is empty in all 3,064 responses. A policy therefore resolves it safely: column Y is always written blank, and any future non-empty Corporate value → `UNMAPPED_COLUMN` (ERROR, Review). Nothing is guessed, and nothing is lost.
 
-### M.5 Remaining blocking decisions (exports-only)
+### M.5 Remaining blocking decisions (exports-only): superseded by N.5 (v0.7)
 
 | # | Decision | Options | Recommendation |
 |---|---|---|---|
@@ -975,8 +982,115 @@ It needs no Google or Microsoft account, API, credentials, network connection, o
 | T37 | `.csv` with ambiguous `03/04/2026` timestamps and no confirmed format | `AMBIGUOUS_DATE` (ERROR). Nothing exported until the format is confirmed |
 | T38 | `.xlsx` without a `MARF RAW` sheet but with a matching header signature | Sheet proposed in the preview. Processing only after confirmation |
 | T39 | Workbook with only team sheets (no raw responses) | Stops: "no raw response sheet found". Derived sheets are never used as input |
-| T40 | Team with `verified_by: business_rule` | Exported, each record tagged `SLOT_BY_BUSINESS_RULE` (INFO), listed in the audit Summary |
-| T41 | Team with no evidence | All its records → Review `UNVERIFIED_TEAM_SLOT`. Reconciliation still balances |
+| T40 | *(superseded by T45 in N.6)* | — |
+| T41 | *(superseded by T46 in N.6)* | — |
 | T42 | MASTERLIST-export pre-flight shows a leader in two slots | Contradiction reported. Team not exportable until resolved |
 | T43 | Template header altered | Run stops with a schema-mismatch message. No output written |
 | T44 | Run with networking disabled | Completes normally (no external calls) |
+
+
+---
+
+## N. Seller-Slot Mapping Status and Final Policies — v0.7
+
+### N.1 Mapping status model (H-30, approved)
+
+Every SALES LEADER entry in `config/teams.yaml` carries exactly one status. The parser code contains **no team names and no slot assignments**: all of them live in configuration.
+
+| Status | Set when | Exported? | Shown as |
+|---|---|---|---|
+| `VERIFIED` | Backed by `masterlist_export` (pre-flight: one slot, ≥ 3 rows, no contradictions) or `owner_confirmation` (written evidence from the form administrator) | Yes | "Verified" + evidence reference |
+| `OWNER_APPROVED_UNVERIFIED` | You explicitly approve an operating assumption (e.g. "team X uses G/H") without independent evidence | Yes, flagged (N.2) | "Owner-approved, **not verified**". Never labelled or summarised as verified |
+| `UNRESOLVED` | No entry, `sample_only` evidence, or an entry pending review | **No**: records held in Review | "Unresolved" |
+
+Entry fields:
+- `source_label` (exact)
+- `destination_label` (defaults to `source_label`, B2)
+- `slot` (1/2/3 or null)
+- `status`
+- `evidence_type`
+- `evidence_ref` (file name + hash, or a note)
+- `approved_by`
+- `approved_on`
+
+Validation on load:
+- A `VERIFIED` entry without `evidence_ref` is rejected.
+- An `OWNER_APPROVED_UNVERIFIED` entry without `approved_by` and `approved_on` is rejected.
+- A non-null `slot` on an `UNRESOLVED` entry is rejected.
+
+**Current configuration (v3.3), as shipped:**
+
+| SALES LEADER | Slot | Status | Note |
+|---|---|---|---|
+| TEAM LESLIE (AAD: …) | — | `UNRESOLVED` | No evidence. **Not invented** |
+| TEAM FERDINAND (AAD: …) | — | `UNRESOLVED` | No evidence |
+| TEAM BERNADETTE (AAD: …) | — | `UNRESOLVED` | No evidence |
+| AM: JESSA | — | `UNRESOLVED` | No evidence |
+| TEAM CHRISTINE (AAD: …) | — | `UNRESOLVED` | No evidence |
+| TEAM RALPH (AAD: …) | — | `UNRESOLVED` | No evidence |
+| TEAM CALOY (AAD: …) | (1) | `UNRESOLVED` (`sample_only`) | Slot noted for fixtures only. Not exportable until upgraded |
+| TEAM HD (AAD: …) | (2) | `UNRESOLVED` (`sample_only`) | As above |
+
+### N.2 Record-level handling
+
+| Code | Severity | Raised when | Effect |
+|---|---|---|---|
+| `SLOT_UNRESOLVED` | ERROR | The leader's entry is `UNRESOLVED` or missing | Record held in Review. Nothing written to any seller slot |
+| `SLOT_OWNER_APPROVED_UNVERIFIED` | WARNING | The leader's entry is `OWNER_APPROVED_UNVERIFIED` | Exported **and** listed in the Review report, with the mapping's `approved_by` / `approved_on` |
+| `SELLER_SLOT_MISMATCH` | ERROR | (unchanged) The configured slot is empty while another slot holds data | Held. **Nothing is ever moved between G/H, I/J and K/L** |
+
+The seller name and its e-mail are always written together into the single configured slot. The other two slots stay blank.
+
+**Run report and audit Summary** gain a *Mapping status* table:
+
+| Leader | Status | Slot | Evidence / approval | Records exported | Records held |
+|---|---|---|---|---|---|
+
+The headline also states counts per status, e.g. `Exported: 0 verified · N owner-approved (unverified) · Held: M unresolved`.
+
+**Expected result on v3.3 with the shipped configuration:** 3,064 responses read, 0 exported, 3,064 held as `SLOT_UNRESOLVED`, reconciliation balanced. This is the correct *default*, not a permanent state. Each team becomes exportable as soon as you add a `VERIFIED` or `OWNER_APPROVED_UNVERIFIED` entry, with no code change.
+
+### N.3 B2 and B3 (approved)
+
+- **B2: SALES LEADER.** Written exactly as in the source unless `destination_label` is explicitly set in an approved `teams.yaml` entry. A label change is listed in the audit Mapping sheet.
+- **B3: `Question` (column Y).** Always written blank. Rationale (documented): the only candidate source column (`If Corporate, please choose below:`) is empty in all 3,064 v3.3 responses, and the destination sample never populates `Question`. A future non-empty Corporate value → `UNMAPPED_COLUMN` (ERROR, Review), so nothing is guessed or lost.
+
+### N.4 Rules carried forward (unchanged)
+
+- The 35-column MASTERLIST schema and byte-exact headers.
+- All approved transformations: X1, X2, H-3–H-5, H-7, H-8, H-22–H-25, H-27.
+- **ERRORs are held back.** WARNINGs are exported and also appear in the Review report. INFO goes to the audit log only.
+- Seller e-mail: an approved directory row is used. Otherwise the submitter e-mail is used, with `SELLER_EMAIL_FROM_SUBMITTER`, plus `SUBMITTER_NOT_SELLER` (WARNING) when an approved directory e-mail differs from the submitter.
+- `Referral` / `Site Walk-in` → `UNMAPPED_VALUE` (ERROR, Review).
+- Exports-only access (M). No Google or Microsoft access, credentials or test submissions. Tests use synthetic fixtures plus a local golden run on the v3.3 export.
+
+### N.5 Revised decision list
+
+**Design decisions requiring your input: none blocking.** B1, B2 and B3 are now approved policies, and every component can be built and tested against them.
+
+**One input remains open. It does not block the build, only the output:**
+
+| # | Input | Default if not provided |
+|---|---|---|
+| **N-1** | For each of the six source teams: a `VERIFIED` mapping (MASTERLIST export or owner confirmation), **or** an `OWNER_APPROVED_UNVERIFIED` slot you explicitly approve, **or** leave it `UNRESOLVED` | `UNRESOLVED`: that team's records are held in Review |
+
+**Non-blocking follow-ups:**
+- **H-1:** the seller-directory review.
+- **H-7:** mappings for `Referral` and `Site Walk-in`.
+- **Section L:** the repository-owner remediation of historical exposure.
+
+**Gate to start implementation:** your approval of this revised design (v0.7).
+
+### N.6 Tests added or changed
+
+| # | Case | Expected |
+|---|---|---|
+| T45 | Leader configured `OWNER_APPROVED_UNVERIFIED`, slot 1 | Exported in G/H. WARNING `SLOT_OWNER_APPROVED_UNVERIFIED`. Listed in Review. The Mapping-status table shows "Owner-approved, not verified" with approver and date |
+| T46 | Leader `UNRESOLVED` or missing | All its records held, `SLOT_UNRESOLVED`. No seller slot written. Reconciliation balances |
+| T47 | `VERIFIED` entry without `evidence_ref`, or `OWNER_APPROVED_UNVERIFIED` without approver/date | Configuration rejected at load, with a clear message. No processing |
+| T48 | Report wording | No output, report or sheet labels an `OWNER_APPROVED_UNVERIFIED` mapping as "verified". Checked by a string assertion over the generated reports |
+| T49 | Parser source contains no team labels or slot numbers | A static test scans the package for configured team labels. Zero hits |
+| T50 | `destination_label` set | Written instead of the source label, and listed in the audit Mapping sheet. Not set → source label verbatim |
+| T51 | Non-empty Corporate value in a future export | Column Y blank. `UNMAPPED_COLUMN` ERROR. Record held |
+| T52 | Golden run, v3.3, shipped config | 3,064 read · 0 exported · 3,064 `SLOT_UNRESOLVED` · balanced |
+| T53 | Golden run, v3.3, a test config marking all six teams `OWNER_APPROVED_UNVERIFIED` (test-only file, not shipped) | Exported = 3,064 − ERROR records − held duplicates (2). Known ERROR sources from profiling: `Referral` (20), `Site Walk-in` (1), v1 `Digital` = `Others` (2). Any others are itemised by code. The exact figures are fixed as the golden baseline at the first run. Every exported record carries `SLOT_OWNER_APPROVED_UNVERIFIED` |
