@@ -60,14 +60,16 @@ def cmd_preview(a) -> int:
             _print_preview(e.cmap)
         print("Re-run with --sheet, --accept-suggestions and/or --ignore-unmapped after checking the items above.")
         return 2
-    print(f"Sheet '{sd.sheet_name}': {len(sd.rows)} responses, {sd.blank_rows} blank rows")
+    print(f"Response sheet '{sd.sheet_name}': {len(sd.rows)} responses, {sd.blank_rows} blank rows"
+          + (f"; ignored: {', '.join(sd.ignored_sheets)}" if sd.ignored_sheets else ""))
     _print_preview(cmap)
     print("Mapping complete: no item needs confirmation.")
     return 0
 
 
 def cmd_run(a) -> int:
-    opts = _options(a, last_id=a.last_id, team_filter=a.team, leads_log=a.leads_log, dry_run=a.dry_run)
+    opts = _options(a, last_id=a.last_id, team_filter=a.team, leads_log=a.leads_log, dry_run=a.dry_run,
+                    team_sheet_check=a.team_sheet_check)
     try:
         r = run(opts)
     except NeedsConfirmation as e:
@@ -81,6 +83,7 @@ def cmd_run(a) -> int:
               + ", ".join(f"{b.batch_id} ({b.records_exported} exported)" for b in r.previous_batches))
     c = r.counts
     print(f"{'DRY RUN — ' if a.dry_run else ''}Batch {r.batch_id}")
+    print(f"  Response sheet: '{r.sheet.sheet_name}'" + (f" ({len(r.sheet.ignored_sheets)} other sheet(s) ignored)" if r.sheet.ignored_sheets else ""))
     print(f"  Responses read: {c['responses']}  (blank rows {c['blank_rows']}, no client data {c['responses_no_client']}, "
           f"multi-block {c['responses_multi_block']})")
     print(f"  Records built: {c['records_built']} = exported {c['records_exported']} + review {c['records_review']} + "
@@ -146,7 +149,7 @@ def cmd_draft_directory(a) -> int:
     from .pipeline import _nonempty_counts
     from .reader import choose_sheet
     src = cfg.profile.source
-    sheet = a.sheet or choose_sheet(a.source, src["preferred_sheet"], src["signature_keys"])[0]
+    sheet = a.sheet or choose_sheet(a.source, src["preferred_sheet"], src["signature_keys"]).name
     sd = read_sheet(a.source, sheet)
     cmap = resolve(sd.headers, cfg.profile, _nonempty_counts(sd))
     sub_col = cmap.response["submitter_email"]
@@ -192,6 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--team", action="append", help="Export only these SALES LEADER prefixes (others are counted as excluded)")
     p.add_argument("--leads-log", action="store_true", help="Also write the optional 17-column Leads Log")
     p.add_argument("--dry-run", action="store_true", help="Audit only: no import file, ledger unchanged")
+    p.add_argument("--team-sheet-check", action="store_true",
+                   help="Also compare against the workbook's team sheets in the audit (reference only; off by default)")
     p.set_defaults(func=cmd_run)
 
     p = sub.add_parser("batches", help="List import batches in the ledger")

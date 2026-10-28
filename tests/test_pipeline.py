@@ -322,12 +322,34 @@ def test_T37_csv_ambiguous_dates(env):
     assert ok.timestamp == datetime(2026, 4, 3, 10, 0)
 
 
-def test_T38_sheet_proposed_when_marf_raw_missing(env):
-    src = env.source([response()], sheet="Form Responses 1")
+def test_T38_single_response_sheet_used_automatically_others_ignored(env):
+    team_sheet = [["2026 SALES FUNNEL REPORT"], [], [], [None, "TIMESTAMP ", "SELLER EMAIL ADDRESS", "AAD", "AS"]]
+    src = env.source([response()], sheet="Form Responses 1", extra_sheets={"TEAM ALPHA": team_sheet, "Notes": [["x"]]})
+    r = env.run(src)
+    assert r.sheet.sheet_name == "Form Responses 1" and r.sheet.ignored_sheets == ["TEAM ALPHA", "Notes"]
+    summary = dict(row[:2] for row in openpyxl.load_workbook(r.outputs["audit"])["Summary"].iter_rows(values_only=True))
+    assert summary["Response sheet used"] == "Form Responses 1" and summary["Other sheets ignored"] == "TEAM ALPHA, Notes"
+
+
+def test_marf_raw_preferred_over_other_response_like_sheets(env):
+    other = [[h for _, h in default_layout()]]
+    src = env.source([response()], extra_sheets={"Copy of responses": other})
+    assert env.run(src).sheet.sheet_name == "MARF RAW"
+
+
+def test_several_response_sheets_without_marf_raw_need_a_choice(env):
+    other = [[h for _, h in default_layout()]]
+    src = env.source([response()], sheet="Responses A", extra_sheets={"Responses B": other})
     with pytest.raises(NeedsConfirmation) as e:
         env.run(src)
-    assert e.value.sheet == "Form Responses 1"
-    assert env.run(src, sheet="Form Responses 1").counts["records_built"] == 1
+    assert e.value.sheet == "Responses A"
+    assert env.run(src, sheet="Responses A").counts["records_built"] == 1
+
+
+def test_team_sheet_check_is_opt_in(env):
+    src = env.source([response()], extra_sheets={"TEAM ALPHA": [[None, "TIMESTAMP", "AAD", "AS"]]})
+    assert "TeamSheetCheck" not in openpyxl.load_workbook(env.run(src, dry_run=True).outputs["audit"]).sheetnames
+    assert "TeamSheetCheck" in openpyxl.load_workbook(env.run(src, dry_run=True, team_sheet_check=True).outputs["audit"]).sheetnames
 
 
 def test_T39_team_sheets_only_is_rejected(env):
@@ -338,7 +360,7 @@ def test_T39_team_sheets_only_is_rejected(env):
     ws.append([None, "TIMESTAMP ", "SELLER EMAIL ADDRESS", "AAD", "AS"])
     p = env.root / "teams_only.xlsx"
     wb.save(p)
-    with pytest.raises(ReadError, match="No raw response sheet"):
+    with pytest.raises(ReadError, match="No response sheet found"):
         env.run(p)
 
 

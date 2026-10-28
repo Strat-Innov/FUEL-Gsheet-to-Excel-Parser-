@@ -6,7 +6,7 @@ Input files are only ever opened for reading.
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import openpyxl
@@ -26,6 +26,7 @@ class SheetData:
     rows: list[tuple[int, list[object]]]  # (1-based source row number, values)
     blank_rows: int
     is_csv: bool
+    ignored_sheets: list[str] = field(default_factory=list)
 
 
 def list_sheets(path: Path) -> list[str]:
@@ -43,28 +44,42 @@ def _signature_ok(headers: list[object], signature_keys: list[str]) -> bool:
     return all(k in keys for k in signature_keys)
 
 
-def choose_sheet(path: Path, preferred: str, signature_keys: list[str], header_row: int = 1) -> tuple[str, bool]:
-    """Return (sheet name, needs_confirmation).
+@dataclass
+class SheetChoice:
+    name: str
+    needs_confirmation: bool
+    ignored: list[str]  # every other sheet in the workbook; never read for data
 
-    The preferred sheet is used when present. Otherwise the first sheet whose header row
-    carries the response signature is proposed and must be confirmed (T38). Derived
-    team sheets never carry the signature, so they are never chosen (T39).
+
+def choose_sheet(path: Path, preferred: str, signature_keys: list[str], header_row: int = 1) -> SheetChoice:
+    """Pick the one response sheet and ignore all others.
+
+    The response sheet is recognised by its header row (Timestamp, SALES LEADER, Lead Source and the
+    Seller Name client blocks). The preferred name (MARF RAW) wins when it carries those headers.
+    Otherwise a single matching sheet is used automatically; only several matching sheets need the
+    user to choose. Derived team sheets never carry the signature, so they are never chosen (T39).
     """
     if path.suffix.lower() == ".csv":
-        return path.stem, False
+        return SheetChoice(path.stem, False, [])
     wb = openpyxl.load_workbook(path, read_only=True)
     try:
-        if preferred in wb.sheetnames:
-            return preferred, False
-        for name in wb.sheetnames:
-            ws = wb[name]
-            first = next(ws.iter_rows(min_row=header_row, max_row=header_row, values_only=True), ())
+        names = list(wb.sheetnames)
+        matching = []
+        for name in names:
+            first = next(wb[name].iter_rows(min_row=header_row, max_row=header_row, values_only=True), ())
             if _signature_ok(list(first), signature_keys):
-                return name, True
+                matching.append(name)
     finally:
         wb.close()
+    others = lambda chosen: [n for n in names if n != chosen]
+    if preferred in matching or (preferred in names and not matching):
+        return SheetChoice(preferred, False, others(preferred))
+    if len(matching) == 1:
+        return SheetChoice(matching[0], False, others(matching[0]))
+    if matching:
+        return SheetChoice(matching[0], True, others(matching[0]))
     raise ReadError(
-        "No raw response sheet found: no sheet has the Timestamp / SALES LEADER / Seller Name headers. "
+        "No response sheet found: no sheet has the Timestamp / SALES LEADER / Lead Source / Seller Name headers. "
         "Derived team sheets cannot be used as input."
     )
 

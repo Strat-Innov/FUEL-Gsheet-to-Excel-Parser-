@@ -161,7 +161,7 @@ function describe(role, file) {
   const i = file.info || {};
   if (role === "sellers") return i.kind === "sellers" ? ["ok", "Seller directory CSV recognised"] : ["warn", "Does not look like a seller directory (first column should be seller_name)."];
   if (role === "source") {
-    if (i.source_sheet) return ["ok", `Response export recognised · sheet “${i.source_sheet}”`];
+    if (i.source_sheet) return ["ok", `Response export recognised · using sheet “${i.source_sheet}”` + (i.other_sheets ? ` · ${i.other_sheets} other sheet${i.other_sheets > 1 ? "s" : ""} ignored` : "")];
     if (i.template_sheet) return ["err", "This looks like the MASTERLIST template, not a response export. Use Swap or choose another file."];
     return ["warn", "Response headers (Timestamp, SALES LEADER, Seller Name) not found. The check will explain what is missing."];
   }
@@ -262,7 +262,8 @@ function renderSummary() {
   metric("Already imported", c.records_already_imported);
   const ul = $("#checks");
   ul.replaceChildren(...r.checks.map((k) => el("li", { text: `${k.ok ? "✅" : "❌"} ${k.name}` })));
-  $("#headline").textContent = `Sheet "${r.sheet}". Exported: ${fmt(r.exported_verified)} verified · ${fmt(r.exported_owner_approved)} owner-approved (not verified).` +
+  const ignored = r.ignored_sheets.length ? ` (${r.ignored_sheets.length} other sheet${r.ignored_sheets.length > 1 ? "s" : ""} ignored: ${r.ignored_sheets.join(", ")})` : "";
+  $("#headline").textContent = `Response sheet "${r.sheet}"${ignored}. Exported: ${fmt(r.exported_verified)} verified · ${fmt(r.exported_owner_approved)} owner-approved (not verified).` +
     (r.previous_batches.length ? ` This exact file was exported before (${r.previous_batches.map((b) => b.batch_id).join(", ")}).` : "");
   const tb = $("#issues");
   tb.replaceChildren(...r.issues.map((i) => el("tr", {}, el("td", { text: i.code }), el("td", {}, el("span", { class: "sev " + i.severity, text: i.severity })),

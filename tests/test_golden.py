@@ -39,6 +39,7 @@ def test_T52_shipped_config_exports_nothing_and_accounts_for_everything(tmp_path
     assert all(ok for _, ok, _ in r.checks)
     assert sum("SLOT_UNRESOLVED" in rec.codes() for rec in r.records) == 3064
     assert len(r.cmap.blocks) == 13 and not r.cmap.needs_confirmation
+    assert r.sheet.sheet_name == "MARF RAW" and len(r.sheet.ignored_sheets) == 7
     assert hashlib.sha256(Path(SRC).read_bytes()).hexdigest() == before
     wb = openpyxl.load_workbook(r.outputs["import"], read_only=True)
     assert wb["MASTERLIST"].max_row == 1  # header only
@@ -47,7 +48,7 @@ def test_T52_shipped_config_exports_nothing_and_accounts_for_everything(tmp_path
 
 
 def test_team_sheet_cross_check_has_no_mismatches(tmp_path):
-    r = _run(tmp_path, dry_run=True)
+    r = _run(tmp_path, dry_run=True, team_sheet_check=True)
     ws = openpyxl.load_workbook(r.outputs["audit"], read_only=True)["TeamSheetCheck"]
     rows = list(ws.iter_rows(min_row=2, values_only=True))
     assert rows[0][1] >= 3040  # team-sheet rows matched to a record

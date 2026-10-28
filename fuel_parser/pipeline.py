@@ -19,7 +19,7 @@ from .history import BatchRow, Ledger
 from .mapping import (ColumnMap, decisions_from_preview, header_signature, load_decisions, resolve,
                       save_decisions)
 from .model import Issue, Record, RecordStatus, Severity, SourceResponse
-from .reader import SheetData, choose_sheet, read_sheet
+from .reader import SheetData, choose_sheet, list_sheets, read_sheet
 from .writer import leads_log_row, read_template_header, write_leads_log, write_masterlist
 
 log = logging.getLogger("fuel_parser")
@@ -56,6 +56,7 @@ class RunOptions:
     timestamp_formats: list[str] | None = None
     accept_suggestions: bool = False
     ignore_unmapped: bool = False
+    team_sheet_check: bool = False  # opt-in: other sheets are ignored by default (H-33)
     now: datetime | None = None
 
 
@@ -95,12 +96,15 @@ def prepare(opts: RunOptions) -> tuple[Config, SheetData, ColumnMap]:
     src = cfg.profile.source
     if opts.sheet:
         sheet = opts.sheet
+        ignored = [n for n in list_sheets(opts.source) if n != sheet]
     else:
-        sheet, needs = choose_sheet(opts.source, src["preferred_sheet"], src["signature_keys"], src.get("header_row", 1))
-        if needs:
-            raise NeedsConfirmation(f"Sheet '{src['preferred_sheet']}' not found. Proposed sheet: '{sheet}'. "
+        choice = choose_sheet(opts.source, src["preferred_sheet"], src["signature_keys"], src.get("header_row", 1))
+        sheet, ignored = choice.name, choice.ignored
+        if choice.needs_confirmation:
+            raise NeedsConfirmation(f"Several sheets look like response sheets. Proposed sheet: '{sheet}'. "
                                     "Confirm it by passing the sheet name explicitly.", sheet=sheet)
     sd = read_sheet(opts.source, sheet, src.get("header_row", 1))
+    sd.ignored_sheets = ignored
     nonempty = _nonempty_counts(sd)
     sig = header_signature(sd.headers)
     decisions = load_decisions(opts.profiles_dir, sig)

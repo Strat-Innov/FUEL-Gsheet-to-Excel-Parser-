@@ -30,7 +30,7 @@ On Windows, use `.venv\Scripts\pip` and `.venv\Scripts\fuel-parser` instead of `
    .venv/bin/fuel-parser run --source "FUEL RESP (CSP-AD MARF) v3.3.xlsx" --template "FUEL (MGM-AD ADMIN) (2).xlsx" --dry-run
    ```
 4. Open `output/FUEL_IMPORT_AUDIT_….xlsx`: **Summary** (reconciliation), **MappingStatus**, **Review** (each held
-   record with its reason and the action to take), **RowLog** (every source row), **TeamSheetCheck**.
+   record with its reason and the action to take), **RowLog** (every source row).
 
 With the shipped `config/teams.yaml`, every SALES LEADER is `UNRESOLVED`, so **0 records are exported** and all
 responses are listed in Review with `SLOT_UNRESOLVED`. This is the intended starting state.
@@ -79,7 +79,9 @@ personal data and is git-ignored.
 
 | Situation | Option |
 |---|---|
-| Workbook has no `MARF RAW` sheet | `--sheet "<name>"` after checking the proposed sheet |
+| Which sheet is read | Only the response sheet: `MARF RAW`, or the one sheet with the response headers. All other sheets (team logs etc.) are ignored and listed in the audit |
+| Several sheets look like response sheets | `--sheet "<name>"` to choose one |
+| Compare with the workbook's team sheets (reference only) | `--team-sheet-check` |
 | CSV with ambiguous dates | `--timestamp-format "%m/%d/%Y %H:%M:%S"` |
 | Renamed headers flagged as suggestions | check them, then `--accept-suggestions` (saved per header layout in `profiles/`) |
 | Unknown non-empty columns | check them, then `--ignore-unmapped` (saved) |

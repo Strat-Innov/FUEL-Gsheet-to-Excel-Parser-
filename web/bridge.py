@@ -103,7 +103,7 @@ def _result(result) -> dict:
                                               or any(i.severity != Severity.INFO for i in r.issues)) + len(result.response_issues),
         "outputs": {k: str(v) for k, v in result.outputs.items()},
         "previous_batches": [{"batch_id": b.batch_id, "exported": b.records_exported} for b in result.previous_batches],
-        "sheet": result.sheet.sheet_name,
+        "sheet": result.sheet.sheet_name, "ignored_sheets": result.sheet.ignored_sheets,
     }
 
 
@@ -168,6 +168,7 @@ def classify(path: str) -> str:
     found = {"source_sheet": None, "template_sheet": None, "template_exact": False}
 
     def inspect(name: str, header: list) -> None:
+        found["_sheets"] = found.get("_sheets", 0) + 1
         keys = {match_key(h) for h in header}
         if src_keys <= keys and found["source_sheet"] is None:
             found["source_sheet"] = name
@@ -183,7 +184,8 @@ def classify(path: str) -> str:
             with open(p, encoding="utf-8-sig", errors="replace", newline="") as fh:
                 header = next(csv.reader(fh), [])
             if header and match_key(header[0]) == "seller_name":
-                return json.dumps({"kind": "sellers", **found})
+                found.pop("_sheets", None)
+                return json.dumps({"kind": "sellers", **found, "other_sheets": 0})
             inspect(p.stem, header)
         else:
             wb = openpyxl.load_workbook(p, read_only=True)
@@ -193,7 +195,10 @@ def classify(path: str) -> str:
             finally:
                 wb.close()
     except Exception as e:  # unreadable file: report the type only, never content
-        return json.dumps({"kind": "error", "message": type(e).__name__, **found})
+        found.pop("_sheets", None)
+        return json.dumps({"kind": "error", "message": type(e).__name__, **found, "other_sheets": 0})
+    sheets_seen = found.pop("_sheets", 0)
+    found["other_sheets"] = max(0, sheets_seen - 1) if found["source_sheet"] else 0
     kind = ("both" if found["source_sheet"] and found["template_sheet"] else "source" if found["source_sheet"]
             else "template" if found["template_sheet"] else "unknown")
     return json.dumps({"kind": kind, **found})

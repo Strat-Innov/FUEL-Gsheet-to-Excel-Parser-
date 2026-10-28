@@ -4,8 +4,8 @@ profile_id: marf-v3
 source:
   preferred_sheet: "MARF RAW"
   header_row: 1
-  # Header signature used to pick a sheet when the preferred one is absent (M.2).
-  signature_keys: ["timestamp", "sales leader", "seller name"]
+  # Header signature that identifies the response sheet; all other sheets are ignored (M.2, H-33).
+  signature_keys: ["timestamp", "sales leader", "lead source", "seller name"]
 
   response_fields:
     timestamp: ["timestamp"]

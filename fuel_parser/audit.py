@@ -86,7 +86,8 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
         ["Generated", datetime.now().strftime("%Y-%m-%d %H:%M:%S")],
         ["Source file", Path(opts.source).name],
         ["Source sha256", result.source_sha256],
-        ["Source sheet", result.sheet.sheet_name],
+        ["Response sheet used", result.sheet.sheet_name],
+        ["Other sheets ignored", ", ".join(result.sheet.ignored_sheets) or "(none)"],
         ["Template file", Path(opts.template).name],
         ["Template sha256", file_sha256(opts.template)],
         ["Mapping profile sha256", cfg.profile.sha256],
@@ -167,8 +168,8 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
         if p.kind in ("IGNORED_EMPTY",) or p.target == "ignore":
             _append(um, [p.letter, p.header, p.note])
 
-    if result.sheet.path.suffix.lower() in (".xlsx", ".xlsm"):
-        team_sheet_check(wb, result)
+    if opts.team_sheet_check and result.sheet.path.suffix.lower() in (".xlsx", ".xlsm"):
+        team_sheet_check(wb, result)  # opt-in reference comparison; never an input (H-33)
     wb.save(path)
 
 
