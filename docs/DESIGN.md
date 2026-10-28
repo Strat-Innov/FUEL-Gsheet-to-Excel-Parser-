@@ -1,4 +1,4 @@
-# FUEL Response Parser — Design Specification (v0.4, for approval)
+# FUEL Response Parser — Design Specification (v0.5, for approval)
 
 | Item | Value |
 |---|---|
@@ -821,4 +821,69 @@ BUILD may start once **all** of the following hold:
 3. H-6: `Question` is verified, or you explicitly confirm that it stays unmapped (the build can proceed with Y always blank).
 4. H-1: the seller directory review is returned. Rows may stay unapproved; they fall back to the submitter e-mail.
 
-`Referral` / `Site Walk-in` (H-7) do not block the build. They stay in Review until decided.
+`Referral` / `Site Walk-in` (H-7) do not block the build. Their records stay in Review (`UNMAPPED_VALUE`, ERROR) and are never exported automatically until a mapping is approved.
+
+**Scope of the gate.** Gate items 1–3 block only the components that depend on them: team/slot resolution in `teams.yaml`, the `Question` column, and the final export. They do not block work on components that are independent of those decisions (reader, header matching, block detection, transforms, validation policy, de-duplication, ledger, audit). Implementation of any component still starts only after your explicit go-ahead.
+
+**Test submissions** (J.2 step 2) are **not authorised**. Verification uses read-only inspection of the form first.
+
+---
+
+## K. Microsoft Form Verification Checklist (read-only) — v0.5
+
+Do this in the MGM-AD Microsoft Form's editor, without submitting any responses. Record the results in the table at the end. Before building, those results go into `teams.yaml` (labels and slots) and the H-6 mapping.
+
+**K.1 Open the form**
+- [ ] Open the form that produces `FUEL (MGM-AD ADMIN)` in **edit** mode (not the response link).
+- [ ] Open *… → Settings* and note whether responses are anonymous. This explains `Email = anonymous` in the export.
+
+**K.2 SALES LEADER options (H-28)**
+- [ ] Find the SALES LEADER question and copy every option's text **exactly**: spacing, capitals, parentheses, the `AAD:` / `AM:` prefix.
+- [ ] For each of the six source teams, mark it *present (identical)*, *present (worded differently)* or *absent*.
+- [ ] If any source team is absent, stop and decide whether CSP-AD responses belong in this MASTERLIST at all. This is a scope question, not a mapping question.
+
+**K.3 Branching → seller slot (H-2)**
+- [ ] Open *… → Branching*. On the SALES LEADER question, note the "Go to" target for **every** option.
+- [ ] List the form's sections in order, and mark which ones contain a `Seller Name` question.
+- [ ] Number the `Seller Name` questions in form order: the 1st exports to G/H (`Seller Name` / `Seller's Email Address`), the 2nd to I/J (`…1`), the 3rd to K/L (`…2`).
+- [ ] Confirm that each `Seller Name` question is paired with its own `Seller's Email Address` in the **same** section.
+- [ ] Confirm TEAM CALOY → 1st and TEAM HD → 2nd, so the sample-confirmed entries become form-verified.
+- [ ] Check for a 4th `Seller Name` question. If one exists, the 35-column schema is missing a slot; report it rather than mapping it.
+
+**K.4 `Question` and `Question1` (H-6)**
+- [ ] Find the question between "Name of existing buyer who referred the client to you" and "If Digital - Official Social Media". Note its title (it may be blank), type and options.
+- [ ] Note which **Lead Source** option branches to it (e.g. Corporate).
+- [ ] Confirm that the question between "If Saturation…" and "If Sponsorship Event…" is the Showroom Walk-In detail (`Question1`).
+- [ ] If `Question` cannot be identified, say so. Column Y then stays blank (allowed by the gate).
+
+**K.5 Lead Source options (supports H-7 and the vocabulary)**
+- [ ] Copy every Lead Source option exactly. Is there an option equivalent to the legacy `Referral` (Friend/Relative) or `Site Walk-in`?
+
+**Results to return** (no personal data needed):
+
+| Source SALES LEADER (redacted) | Exact form option text | Present? | Section reached | Seller question # → slot | Verified by / date |
+|---|---|---|---|---|---|
+| TEAM LESLIE (AAD: …) | | | | | |
+| TEAM FERDINAND (AAD: …) | | | | | |
+| TEAM BERNADETTE (AAD: …) | | | | | |
+| AM: JESSA | | | | | |
+| TEAM CHRISTINE (AAD: …) | | | | | |
+| TEAM RALPH (AAD: …) | | | | | |
+| TEAM CALOY (AAD: …) | | | | | |
+| TEAM HD (AAD: …) | | | | | |
+
+| Item | Finding |
+|---|---|
+| `Question` (Y): title, type, options, branched from | |
+| `Question1` (AF) confirmed as Showroom Walk-In | |
+| Lead Source options that could hold `Referral` / `Site Walk-in` | |
+
+---
+
+## L. Repository Privacy Controls — v0.5
+
+- Tracked files are limited to `docs/DESIGN.md` and `.gitignore`. `*.xlsx`, `*.csv`, `*.sqlite`, `output/`, `config/sellers.yaml` and `config/teams.local.yaml` are git-ignored.
+- The design uses only ‹placeholders› for names and e-mails. Team labels appear as *first-name team names* with the leader's full name redacted (`TEAM LESLIE (AAD: …)`). They are organisational labels needed for configuration.
+- Test fixtures are synthetic. Real workbook data is never committed.
+- Before each commit, the tracked tree is scanned against a term list built locally from the workbooks. The term list itself is never committed.
+- History was rewritten on 2026-10-28 to remove an unredacted fixture from earlier commits (see the delivery notes for any residual exposure).
