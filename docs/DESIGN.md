@@ -1,11 +1,11 @@
-# FUEL Response Parser — Design Specification (v0.1, for approval)
+# FUEL Response Parser — Design Specification (v0.3, for approval)
 
 | Item | Value |
 |---|---|
 | Phase | DESIGN (no production code) |
 | Source analysed | `FUEL RESP (CSP-AD MARF) v3.3.xlsx` (Google Forms response export) |
 | Destination analysed | `FUEL (MGM-AD ADMIN) (2).xlsx` → sheet `MASTERLIST` (Microsoft Forms export) |
-| Status | **Awaiting approval of the decisions in Section H** |
+| Status | **v0.3: data-handling rules approved (see the decision register in H). Blocked on H-1, H-2, H-6, H-7, H-8** |
 
 > This document contains structure, counts and rules only. It holds no client records, phone numbers or e-mail addresses. Both workbooks were opened read-only, and neither was modified.
 
@@ -145,7 +145,7 @@ Confidence: **H** = same meaning, verified by data. **M** = same meaning, but th
 | 13 | Client's Surname | `client's surname` | Filled block | Trim. Keep case | H | Required |
 | 14 | Client's First Name | `client's first name` | Filled block | Trim. Keep case | H | Required |
 | 15 | Client's Middle Name | `client's middle name` | Filled block | Trim. Null tokens per H-11 | H | — |
-| 16 | Client's Mobile No. | `mobile no. (client)` | Filled block | **Text.** Trim only. If the reader receives a number (from a future file), convert to an integer string and **flag** `MOBILE_WAS_NUMERIC` (a leading 0 may already be lost). Cell format `@` | H | Pattern `^09\d{9}$` or `^\+639\d{9}$` → OK. Other patterns → warning. Blank → warning |
+| 16 | Client's Mobile No. | `mobile no. (client)` | Filled block | **Text.** Trim only. If the reader receives a number, write its digits as text and flag `MOBILE_WAS_NUMERIC`. **Never add a leading 0, never infer or invent digits.** Cell format `@` | H | Pattern `^09\d{9}$` or `^\+639\d{9}$` → OK. Anything else → `MOBILE_FORMAT_UNEXPECTED` (WARNING, classified by reason: see D.8). Blank → `MOBILE_MISSING` (WARNING) |
 | 17 | Client's Email Address | `email address (client)` | Filled block | Trim. Null tokens per H-11 | H | Valid syntax, else warning (value kept) |
 | 18 | Client's Residence Address | `residence address (client)` | Filled block | Verbatim | H | — |
 | 19 | Project (First Choice) | `project of interest (first choice)` | Filled block | Split on `", "` **against the known project list**, re-join with `;` | M | Each token must be in the project list, else warning `UNKNOWN_PROJECT`. More than one token → warning `MULTI_FIRST_CHOICE` (H-9) |
@@ -254,10 +254,30 @@ The ledger stores hashes and row numbers only. **No client PII is stored.** Keys
 Every issue is an `Issue(code, severity, source_row, field, message)`.
 
 - **ERROR**: the record goes to review only.
-- **WARNING**: the record is exported and also listed in review (H-13).
+- **WARNING**: the record is exported **and** listed in the Review report (H-13). It is not held back.
 - **INFO**: written to the audit log only.
 
 The parser never fills a value it cannot trace to a source cell or an approved rule.
+
+### D.8 Validation policy (approved v0.3)
+
+Severity decides what happens to a record. Every code below is non-destructive: the flagged value is written exactly as received (after the approved whitespace trim) and never corrected. Severities live in `config/validation_policy.yaml`, so a later change in policy is a config change, not a code change. Each run records the policy file's hash in the audit Summary.
+
+| Code | Severity | Raised when | Value written |
+|---|---|---|---|
+| `MOBILE_FORMAT_UNEXPECTED` | WARNING | Mobile is not `09XXXXXXXXX` or `+639XXXXXXXXX`. The issue carries one or more **reason classes**: `missing_leading_zero` (10 digits starting with 9), `wrong_length`, `non_digit_characters`, `repeated_digits` (one digit repeated, e.g. `9999999999`) | Original text, unchanged. No digit added or removed |
+| `MOBILE_WAS_NUMERIC` | WARNING | The cell was stored as a number, so a leading 0 may already have been lost upstream | Digits as text, nothing prefixed |
+| `MOBILE_MISSING` | WARNING | Mobile is blank | Blank |
+| `INVALID_EMAIL` | WARNING | Seller or client e-mail fails syntax: exactly one `@`, no spaces or commas, a domain containing a dot, valid characters | Original text, unchanged |
+| `WHITESPACE_TRIMMED` | INFO | Leading or trailing whitespace removed from any text field. The audit stores the field and the before/after lengths, not the value | Trimmed text |
+| `SELLER_SLOT_MISMATCH` | ERROR | The slot configured for the SALES LEADER is empty but another slot holds a seller name or e-mail | Nothing is moved. Record → Review only |
+| `UNKNOWN_TEAM` | ERROR | SALES LEADER is not in the verified team configuration | Record → Review only |
+| `SELLER_NAME_MISSING`, `MISSING_TIMESTAMP`, `INVALID_DATE`, `AMBIGUOUS_DATE`, `MULTI_BLOCK_RESPONSE`, `NO_CLIENT_DATA`, `UNMAPPED_VALUE` | ERROR | As defined in C and D | Record → Review only |
+| `PROBABLE_DUPLICATE` | HELD | D.4 tier D2 | Later occurrence → Review only |
+| `POSSIBLE_DUPLICATE_CLIENT`, `ORPHAN_DETAIL`, `UNKNOWN_OPTION`, `UNKNOWN_PROJECT`, `MULTI_FIRST_CHOICE`, `SUBMITTER_NOT_SELLER` | WARNING | As defined in C and D | Original value |
+| `SECOND_INCLUDES_FIRST`, `SELLER_EMAIL_FROM_SUBMITTER` | INFO | As defined | Original value |
+
+E-mail validation is **syntax only** (H-24). The parser does not reject unfamiliar domains and does not suggest or apply corrections. A plausible misspelling with valid syntax, such as `name@gmaol.com`, is therefore **not flagged** (accepted residual risk R16).
 
 ---
 
@@ -279,6 +299,7 @@ The parser never fills a value it cannot trace to a source cell or an approved r
 | R12 | Header renamed or reordered | Trailing spaces and wording drift between v1 and v2 | Medium | Normalised alias matching. Fuzzy matches are *suggested only*, never auto-accepted |
 | R13 | Overwriting the live destination | — | High | Read-only inputs. New output file. Path-equality check |
 | R14 | PII leakage | Client names and phones | High | Local only. No network calls. Streamlit telemetry off and bound to `localhost`. Logs hold row numbers and codes, never values |
+| R16 | Misspelled but syntactically valid e-mail domains pass validation | a seller e-mail with a misspelled `gmail` domain in the destination sample | Low | Accepted under H-24: syntax-only checks, no domain guessing |
 | R15 | Time zone ambiguity | Timestamps have no time zone | Low | Treated as local form time (Asia/Manila assumed). Documented, no conversion |
 
 ---
@@ -390,6 +411,7 @@ UX decisions:
    - `RowLog`: every source row → status, `src_key`, output Id.
    - `Mapping`: the mapping actually used, with confidence.
    - `Unmapped`: non-empty columns not mapped.
+3. *(Optional, H-27)* `FUEL_LEADS_LOG_<same stamp>.xlsx`: the 17-column Leads Log projection (Section I), with the exact team-sheet headers, one sheet per team or one combined sheet. It is for validation and comparison only and never replaces MASTERLIST.
 
 ### F.6 Folder structure and naming conventions
 
@@ -437,7 +459,12 @@ All test fixtures are **synthetic workbooks generated by test code**. No real cl
 | T13 | Null tokens | Client e-mail `N/A` | Per H-11 (default: blank + INFO) |
 | T14 | Invalid or ambiguous dates | Text `03/04/2026 10:00`, `"yesterday"`, blank | Ambiguous → Review `AMBIGUOUS_DATE`. Unparseable → `INVALID_DATE`. Blank → `MISSING_TIMESTAMP` |
 | T15 | Leading zeros | Mobile `09XXXXXXXXX` as text | Output cell is the string `09XXXXXXXXX` with format `@` |
-| T16 | Mobile arrives numeric | Number `9XXXXXXXXX` | Written as text `9XXXXXXXXX`, `MOBILE_WAS_NUMERIC` warning |
+| T16 | Mobile arrives numeric | Number `9XXXXXXXXX` | Written as text `9XXXXXXXXX` (no `0` added). WARNINGs `MOBILE_WAS_NUMERIC` + `MOBILE_FORMAT_UNEXPECTED[missing_leading_zero]`. Record **is exported** |
+| T31 | Placeholder mobile | Text `9999999999` | Written exactly. `MOBILE_FORMAT_UNEXPECTED[missing_leading_zero, repeated_digits]`. Record exported and listed in Review |
+| T32 | Malformed e-mail syntax | Seller e-mail `name@gmail,com` | Written exactly. WARNING `INVALID_EMAIL`. No correction |
+| T33 | Unfamiliar or misspelled domain | `x@gmaol.com`, `x@company.ph` | No issue raised. Value written exactly |
+| T34 | Seller in a non-configured slot | Leader configured to slot 1, data only in slot 2 | ERROR `SELLER_SLOT_MISMATCH`. Slot 2 values not moved. Record → Review only |
+| T35 | Leads Log projection | Fixture I.4 | The 17-column output equals table I.4 cell for cell. TIMESTAMP is a datetime cell with format `mmm/dd/yyyy hh:mm:ss` |
 | T17 | Same file processed twice | Run, export, run again | Banner `FILE_ALREADY_PROCESSED`. All rows `ALREADY_IMPORTED`. Export contains 0 records |
 | T18 | Newer export with old and new rows | v3.3 + 5 new rows | Only the 5 new rows are exported |
 | T19 | Exact-content duplicate | Two rows identical except timestamp | First exported, second Review `PROBABLE_DUPLICATE` |
@@ -468,6 +495,29 @@ every source row       appears exactly once in RowLog
 ---
 
 ## H. Decisions Requiring Approval
+
+### Decision register (v0.3)
+
+| # | Topic | Status |
+|---|---|---|
+| H-1 | Seller e-mail source | **OPEN: blocking** |
+| H-2 | Team → seller slot mapping | **OPEN: blocking** (rule approved: the slot comes from SALES LEADER via verified config; a mismatch is flagged, never moved. The table itself is not yet verified) |
+| H-3 | Destination Email / Name | Proposed default, awaiting your confirmation |
+| H-4 | Start time | Proposed default, awaiting your confirmation |
+| H-5 | Id sequence | Proposed default, awaiting your confirmation |
+| H-6 | Meaning of `Question` / `Question1` | **OPEN: blocking** |
+| H-7 | v1 → v2 lead-source translation | **OPEN: blocking** |
+| H-8 | "Others, please specify" text | **OPEN: blocking** |
+| H-9 – H-12, H-14 – H-21 | Defaults | Accepted as recommended (no objection raised) |
+| H-13 | WARNING vs ERROR routing | **Approved**, refined by D.8: warnings export and are listed in Review, errors go to Review only |
+| X1 | SPECIFIC LEAD SOURCE from the paired detail column | **Approved** |
+| X2 | SOURCE OF AWARENESS preserved, `;`-joined, comma-containing options kept whole | **Approved** |
+| H-22 | TIMESTAMP is a real datetime, format `mmm/dd/yyyy hh:mm:ss` | **Approved** |
+| H-23 | LEAD SOURCE (DISTINCT) blank until a rule is approved | **Approved** |
+| H-24 | E-mail: syntax check only, no domain rejection or correction | **Approved** |
+| H-25 | Trim leading/trailing whitespace, logged | **Approved** |
+| H-26 | (v0.2 "every flag → review") | **Withdrawn**, replaced by the D.8 validation policy |
+| H-27 | 17-column Leads Log as an optional separate output | **Approved** |
 
 ### Blocking (the build needs an answer)
 
@@ -521,6 +571,9 @@ every source row       appears exactly once in RowLog
 - AC8: Output headers are byte-identical to the template's `MASTERLIST` headers.
 - AC9: The golden-run counts match Section G.
 - AC10: No PII is written to logs or the ledger, and the tool makes no network calls.
+- AC11: Mobile values are written exactly as received (as text). Unexpected formats raise a classified `MOBILE_FORMAT_UNEXPECTED` WARNING and do not block export (T16, T31).
+- AC12: The seller slot is chosen only from the verified SALES LEADER config. A mismatch raises `SELLER_SLOT_MISMATCH`, and no value is ever moved between slots (T34).
+- AC13: The Leads Log fixture (I.4) reproduces cell for cell (T35).
 
 ---
 
@@ -530,7 +583,7 @@ every source row       appears exactly once in RowLog
 
 The 17 columns `TIMESTAMP … SOURCE OF AWARENESS` match **byte for byte** the header row (row 4, columns B–R) of the source workbook's team "LEADS LOG" sheets. That includes the trailing spaces in `TIMESTAMP `, `MOBILE NO. ` and `LEAD SOURCE `.
 
-**Schema position (unchanged):** `MASTERLIST` (35 columns) stays the destination. The Leads Log is a **projection** of a MASTERLIST record. It is used as a validation fixture and can optionally be exported per team (H-27).
+**Schema position (unchanged):** `MASTERLIST` (35 columns) stays the destination. The Leads Log is a **projection** of a MASTERLIST record. It is used as a validation fixture and is available as an optional, separate output (H-27 approved).
 
 ```
 MARF RAW ──transform──► MASTERLIST record (35) ──project──► Leads Log row (17)
@@ -604,38 +657,38 @@ Expected output under the rules above (`∅` = blank):
 | DISTINCT | ∅ (H-23) | ∅ | ∅ | ∅ | ∅ | ∅ |
 | AWARENESS | **Billboard / Lamp Post Banners** | Billboard / Lamp Post Banners | Email / Online Newsletter;Events;Google / Youtube Ads;Mall Kiosk / Booths;Print Ads;Roadshow;Sales Materials - Brochure / Flyers;Social Media (Facebook, Instagram, etc);Word of Mouth | Events | Mall Kiosk / Booths | Events |
 
-**Expected flags.** Values are never changed; every flag sends the record to review.
+**Expected flags** under the D.8 policy. Values are never changed. None of these is an ERROR, so all six rows are **exported** and also listed in the Review report.
 
 | Id | Code | Field | Reason |
 |---|---|---|---|
-| 6 | `INVALID_EMAIL` | Seller e-mail | Comma in the domain (`…@gmail,com`) |
-| 6, 7, 8, 9, 10 | `MOBILE_FORMAT` + `MOBILE_PLACEHOLDER` | Mobile | 10 digits, no leading `0`, and one repeated digit |
-| 11 | `MOBILE_FORMAT` | Mobile | 10 digits, no leading `0` (prefixing `0` is **not** done) |
-| all | `MOBILE_WAS_NUMERIC` | Mobile | Stored as a number in MASTERLIST |
-| 8 | `SUSPECT_EMAIL_DOMAIN` | Seller e-mail | `gmaol.com` is valid syntax, so it is caught only by the domain-typo rule (H-24) |
+| 6 | `INVALID_EMAIL` (WARNING) | Seller e-mail | Comma in the domain (`…@gmail,com`) |
+| 6, 7, 8, 9, 10 | `MOBILE_FORMAT_UNEXPECTED` [`missing_leading_zero`, `repeated_digits`] (WARNING) | Mobile | 10 digits, no leading `0`, one repeated digit |
+| 11 | `MOBILE_FORMAT_UNEXPECTED` [`missing_leading_zero`] (WARNING) | Mobile | 10 digits, no leading `0`. A `0` is **not** added |
+| all | `MOBILE_WAS_NUMERIC` (WARNING) | Mobile | Stored as a number in MASTERLIST |
+| 8 | *(none)* | Seller e-mail | The misspelled domain (`…@gmaol.com`) has valid syntax. Under H-24 it is **not** flagged (R16) |
 | 6 | `WHITESPACE_TRIMMED` (INFO) | First name | Trailing space (H-25) |
 | 10 | `SECOND_INCLUDES_FIRST` (INFO) | Projects | Botanika appears in both choices |
-| 9 | `UNKNOWN_OPTION`? | Awareness | `Print Ads` and `Roadshow` exist in the MS Forms vocabulary but not in MARF (`Print Ad`). The vocabulary must be the **union** of both forms |
+| 9 | *(none expected)* | Awareness | `Print Ads` and `Roadshow` come from the MS Forms vocabulary, not MARF (`Print Ad`). The known-option list is the **union** of both forms, so no `UNKNOWN_OPTION` is raised |
 
 ### I.5 Differences found against the supplied sample
 
 | # | Supplied expectation | What the data and stated rules give | Resolution needed |
 |---|---|---|---|
-| X1 | Id 6 SPECIFIC LEAD SOURCE = blank | The paired detail column AA holds `Seller Facebook Page`. Requirement 7 means it should be populated | Confirm: populate from the paired detail (recommended), or leave blank |
-| X2 | Id 6 SOURCE OF AWARENESS = blank | AH holds `Billboard / Lamp Post Banners`. Requirement 8 preserves non-blank values too | Confirm: preserve (recommended) |
-| X3 | First name without a trailing space | The source value has a trailing space | H-25: trim with an INFO log (recommended), or keep exact |
-| X4 | TIMESTAMP shown as `Oct/26/2026 17:38:01` | Equals **Completion time**, not Start time (17:35:38) | Confirms Completion time → TIMESTAMP. H-22 decides datetime cell vs text |
-| X5 | Showroom Walk-In example | Its detail sits only in the unnamed `Question1` column | Treating AF as the Showroom detail closes H-6 for AF. `Question` (Y) is still open |
-| X6 | Malformed e-mails flagged | The `…@gmaol.com` address passes any syntax check | H-24: add a configurable common-domain typo check, or accept that it will not be flagged |
+| X1 | Id 6 SPECIFIC LEAD SOURCE = blank | The paired detail column AA holds `Seller Facebook Page`. Requirement 7 means it should be populated | **Resolved (X1 approved)**: populated from the paired detail |
+| X2 | Id 6 SOURCE OF AWARENESS = blank | AH holds `Billboard / Lamp Post Banners`. Requirement 8 preserves non-blank values too | **Resolved (X2 approved)**: preserved, `;`-joined |
+| X3 | First name without a trailing space | The source value has a trailing space | **Resolved (H-25)**: trimmed, `WHITESPACE_TRIMMED` logged |
+| X4 | TIMESTAMP shown as `Oct/26/2026 17:38:01` | Equals **Completion time**, not Start time (17:35:38) | **Resolved (H-22)**: Completion time → datetime cell, `mmm/dd/yyyy hh:mm:ss` |
+| X5 | Showroom Walk-In example | Its detail sits only in the unnamed `Question1` column | Still open under H-6 until confirmed from the MS Form |
+| X6 | Malformed e-mails flagged | The `…@gmaol.com` address passes any syntax check | **Resolved (H-24)**: syntax only. not flagged (R16) |
 | X7 | — | The source's existing team-sheet formula leaves SPECIFIC blank for **all v2 Own Source rows** (the `If Own Source` column is missing from its ranges). It puts *Others* texts and the Seller-FB-Page boosting choice in DISTINCT | The team sheets cannot be a fully trusted comparison. They are compared case-insensitively, except SPECIFIC/DISTINCT |
 
-### I.6 New decisions
+### I.6 Decisions raised in v0.2 (status in the H register)
 
-| # | Decision | Recommendation |
+| # | Decision | Outcome |
 |---|---|---|
-| H-22 | TIMESTAMP cell type | Datetime value with display format `mmm/dd/yyyy hh:mm:ss`. Sorting and filtering keep working, and the value is never re-typed. Alternative: a literal text string |
-| H-23 | LEAD SOURCE (DISTINCT) | Leave blank. Candidate rule if you want one: the second-level detail, i.e. the Seller-FB-Page boosting choice (AI) or the *Others* specify text, as the existing team sheets do |
-| H-24 | Plausible but misspelled e-mail domains | Warning `SUSPECT_EMAIL_DOMAIN` when the domain is within edit distance 1–2 of a configured list (gmail.com, yahoo.com, …) and is not on it |
-| H-25 | Leading and trailing whitespace | Trim, and log `WHITESPACE_TRIMMED` (INFO). Inner spacing is untouched |
-| H-26 | Records with these flags | Every listed flag sends the record to review **with its values unchanged**. This supersedes H-13 for `INVALID_EMAIL`, `SUSPECT_EMAIL_DOMAIN` and `MOBILE_FORMAT` |
-| H-27 | Export the Leads Log view? | Optional per-team export with the exact 17 headers. Off by default |
+| H-22 | TIMESTAMP cell type | **Approved**: real Excel datetime, format `mmm/dd/yyyy hh:mm:ss` |
+| H-23 | LEAD SOURCE (DISTINCT) | **Approved**: blank until an explicit rule is approved. (Candidate on record: the second-level detail, as the team sheets use) |
+| H-24 | E-mail checks | **Approved**: syntax only (`INVALID_EMAIL`). No domain rejection, no typo detection, no correction. `SUSPECT_EMAIL_DOMAIN` is dropped |
+| H-25 | Leading and trailing whitespace | **Approved**: trim, log `WHITESPACE_TRIMMED` (INFO). Inner spacing untouched |
+| H-26 | Routing of flagged records | **Withdrawn**. Replaced by the D.8 validation policy (mobile and e-mail format issues are WARNINGs, not blocking) |
+| H-27 | Leads Log output | **Approved**: an optional, separate 17-column output for validation and comparison, with the exact headers. MASTERLIST (35 columns) unchanged |
