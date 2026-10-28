@@ -521,3 +521,121 @@ every source row       appears exactly once in RowLog
 - AC8: Output headers are byte-identical to the template's `MASTERLIST` headers.
 - AC9: The golden-run counts match Section G.
 - AC10: No PII is written to logs or the ledger, and the tool makes no network calls.
+
+---
+
+## I. Leads Log (17-column) Validation Fixture — v0.2 addendum
+
+### I.1 What the 17-column format is
+
+The 17 columns `TIMESTAMP … SOURCE OF AWARENESS` match **byte for byte** the header row (row 4, columns B–R) of the source workbook's team "LEADS LOG" sheets. That includes the trailing spaces in `TIMESTAMP `, `MOBILE NO. ` and `LEAD SOURCE `.
+
+**Schema position (unchanged):** `MASTERLIST` (35 columns) stays the destination. The Leads Log is a **projection** of a MASTERLIST record. It is used as a validation fixture and can optionally be exported per team (H-27).
+
+```
+MARF RAW ──transform──► MASTERLIST record (35) ──project──► Leads Log row (17)
+```
+
+### I.2 Projection rules (MASTERLIST record → Leads Log row)
+
+| # | Leads Log column | Taken from (MASTERLIST) | Rule |
+|---|---|---|---|
+| 1 | TIMESTAMP | Completion time | Datetime value kept unchanged. Display format `mmm/dd/yyyy hh:mm:ss` (renders `Oct/26/2026 17:38:01`). H-22 |
+| 2 | SELLER EMAIL ADDRESS | Seller's Email Address **of the slot mapped to SALES LEADER** | Verbatim. Validated, never corrected |
+| 3 | AAD | SALES LEADER | Verbatim |
+| 4 | AS | Seller Name **of the same slot** | Verbatim. The prefix (`AS:`, `AM:`, `AAD:`) is **never** used to reassign the AAD/AS fields |
+| 5–7 | SURNAME / FIRST / MIDDLE NAME (CLIENT) | Client's Surname / First / Middle | Verbatim apart from whitespace trimming (H-25). Blank stays blank |
+| 8 | MOBILE NO. | Client's Mobile No. | Text. Numeric input → digits as text, **no leading 0 added**. Validated |
+| 9 | EMAIL ADDRESS | **Client's** Email Address | Never the submitter or seller e-mail. Blank stays blank |
+| 10 | RESIDENCE ADDRESS | Client's Residence Address | Verbatim |
+| 11–12 | PROJECT (FIRST / SECOND CHOICE) | Project of Interest (First / Second Choice) | Verbatim, `;`-separated |
+| 13 | REMARKS | REMARKS | Verbatim |
+| 14 | LEAD SOURCE | Lead Source | Verbatim |
+| 15 | SPECIFIC LEAD SOURCE | **Only** the detail column paired with the selected Lead Source (table I.3) | Blank if that column is blank or the lead source has no detail column. A value in a non-paired detail column → `ORPHAN_DETAIL` warning, not used |
+| 16 | LEAD SOURCE (DISTINCT) | — | **Blank until a rule is approved** (H-23) |
+| 17 | SOURCE OF AWARENESS | Source of Awareness | Verbatim, `;`-separated. Blank stays blank |
+
+**Seller slot rule:**
+- `teams.yaml` maps SALES LEADER → slot.
+- Sample evidence: `TEAM CALOY` → slot 1 (G/H) and `TEAM HD` → slot 2 (I/J).
+- If the configured slot is empty but another slot is filled → `SELLER_SLOT_MISMATCH` (review). The value is not moved.
+- An unknown leader → `UNKNOWN_TEAM` (review).
+
+### I.3 Lead Source → SPECIFIC LEAD SOURCE pairing
+
+| Lead Source | Detail column (MASTERLIST) |
+|---|---|
+| Booth Manning | W (Booth Location) |
+| Buyer Referral | X (referrer name) |
+| Corporate | Y `Question` (pending H-6) |
+| Digital - Official Social Media | Z |
+| Digital - Seller Social Media | AA |
+| Own Source | AB |
+| Repeat Buyer | AC |
+| Roadshow | AD |
+| Saturation | AE |
+| Showroom Walk-In | AF `Question1` (pending H-6) |
+| Sponsorship Event | AG |
+| Digital - Official Website, Marketing Partner, Others | none → blank |
+
+### I.4 Fixture: five TEAM CALOY rows plus one slot-2 control
+
+**Source:** the destination workbook's sample rows (Ids 6, 8, 9, 10, 11 = TEAM CALOY; Id 7 = TEAM HD as the slot-2 control). Ids 2–5 (`Option 1/2`) are form test entries and are excluded. *Assumption to confirm: these are the "five sample rows".*
+
+Expected output under the rules above (`∅` = blank):
+
+| Col | Id 6 | Id 8 | Id 9 | Id 10 | Id 11 | Id 7 (control) |
+|---|---|---|---|---|---|---|
+| TIMESTAMP | Oct/26/2026 17:38:01 | Oct/27/2026 10:26:58 | Oct/27/2026 10:32:17 | Oct/27/2026 14:54:20 | Oct/27/2026 15:55:30 | Oct/27/2026 10:23:31 |
+| SELLER EMAIL | ‹e-mail with comma in domain› | ‹e-mail, misspelled gmail domain› | ‹valid e-mail› | ‹valid e-mail› | ‹valid e-mail› | ‹valid e-mail› (slot 2) |
+| AAD | TEAM CALOY (AAD: …) | same | same | same | same | TEAM HD (AAD: …) |
+| AS | ‹AAD:-prefixed name› | ‹AS: seller A› | ‹AS: seller B› | ‹AS: seller C› | ‹AS: seller B› | ‹AS: seller D› (slot 2) |
+| SURNAME | ‹surname› | ‹surname› | ‹surname› | ‹surname› | ‹surname› | ‹surname› |
+| FIRST NAME | ‹first name› (source has a trailing space, H-25) | ‹first name› | ‹first name› | ‹first name› | ‹first name› | ‹first name› |
+| MIDDLE NAME | ∅ | ∅ | ∅ | ∅ | ∅ | ‹middle name› |
+| MOBILE NO. | 9999999999 | 9999999999 | 9999999999 | 9999999999 | ‹10 digits, starts with 9› | 9999999999 |
+| EMAIL ADDRESS | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ |
+| RESIDENCE | METRO MANILA - Manila City | METRO MANILA - Valenzuela City | LUZON - Baliwag City, Bulacan | METRO MANILA - Caloocan City | METRO MANILA - Las Piñas City | METRO MANILA - Muntinlupa City |
+| PROJECT 1st | 1001 Parkway | The Levels | Botanika | Botanika | 1001 Parkway | Golf Ridge |
+| PROJECT 2nd | Botanika | Timberland Heights;Commercial Lot - Filinvest City | Studio N | Botanika;Brentville;Golf Ridge;Studio N;The Levels | The Levels | Brentville |
+| REMARKS | ∅ | ∅ | ∅ | ∅ | ∅ | ∅ |
+| LEAD SOURCE | Digital - Seller Social Media | Showroom Walk-In | Digital - Official Website | Digital - Seller Social Media | Digital - Seller Social Media | Showroom Walk-In |
+| SPECIFIC | **Seller Facebook Page** | **The Levels Sales Hub** | ∅ (no detail column) | Seller Facebook Page | Seller Facebook Page | Filigree Showsuites |
+| DISTINCT | ∅ (H-23) | ∅ | ∅ | ∅ | ∅ | ∅ |
+| AWARENESS | **Billboard / Lamp Post Banners** | Billboard / Lamp Post Banners | Email / Online Newsletter;Events;Google / Youtube Ads;Mall Kiosk / Booths;Print Ads;Roadshow;Sales Materials - Brochure / Flyers;Social Media (Facebook, Instagram, etc);Word of Mouth | Events | Mall Kiosk / Booths | Events |
+
+**Expected flags.** Values are never changed; every flag sends the record to review.
+
+| Id | Code | Field | Reason |
+|---|---|---|---|
+| 6 | `INVALID_EMAIL` | Seller e-mail | Comma in the domain (`…@gmail,com`) |
+| 6, 7, 8, 9, 10 | `MOBILE_FORMAT` + `MOBILE_PLACEHOLDER` | Mobile | 10 digits, no leading `0`, and one repeated digit |
+| 11 | `MOBILE_FORMAT` | Mobile | 10 digits, no leading `0` (prefixing `0` is **not** done) |
+| all | `MOBILE_WAS_NUMERIC` | Mobile | Stored as a number in MASTERLIST |
+| 8 | `SUSPECT_EMAIL_DOMAIN` | Seller e-mail | `gmaol.com` is valid syntax, so it is caught only by the domain-typo rule (H-24) |
+| 6 | `WHITESPACE_TRIMMED` (INFO) | First name | Trailing space (H-25) |
+| 10 | `SECOND_INCLUDES_FIRST` (INFO) | Projects | Botanika appears in both choices |
+| 9 | `UNKNOWN_OPTION`? | Awareness | `Print Ads` and `Roadshow` exist in the MS Forms vocabulary but not in MARF (`Print Ad`). The vocabulary must be the **union** of both forms |
+
+### I.5 Differences found against the supplied sample
+
+| # | Supplied expectation | What the data and stated rules give | Resolution needed |
+|---|---|---|---|
+| X1 | Id 6 SPECIFIC LEAD SOURCE = blank | The paired detail column AA holds `Seller Facebook Page`. Requirement 7 means it should be populated | Confirm: populate from the paired detail (recommended), or leave blank |
+| X2 | Id 6 SOURCE OF AWARENESS = blank | AH holds `Billboard / Lamp Post Banners`. Requirement 8 preserves non-blank values too | Confirm: preserve (recommended) |
+| X3 | First name without a trailing space | The source value has a trailing space | H-25: trim with an INFO log (recommended), or keep exact |
+| X4 | TIMESTAMP shown as `Oct/26/2026 17:38:01` | Equals **Completion time**, not Start time (17:35:38) | Confirms Completion time → TIMESTAMP. H-22 decides datetime cell vs text |
+| X5 | Showroom Walk-In example | Its detail sits only in the unnamed `Question1` column | Treating AF as the Showroom detail closes H-6 for AF. `Question` (Y) is still open |
+| X6 | Malformed e-mails flagged | The `…@gmaol.com` address passes any syntax check | H-24: add a configurable common-domain typo check, or accept that it will not be flagged |
+| X7 | — | The source's existing team-sheet formula leaves SPECIFIC blank for **all v2 Own Source rows** (the `If Own Source` column is missing from its ranges). It puts *Others* texts and the Seller-FB-Page boosting choice in DISTINCT | The team sheets cannot be a fully trusted comparison. They are compared case-insensitively, except SPECIFIC/DISTINCT |
+
+### I.6 New decisions
+
+| # | Decision | Recommendation |
+|---|---|---|
+| H-22 | TIMESTAMP cell type | Datetime value with display format `mmm/dd/yyyy hh:mm:ss`. Sorting and filtering keep working, and the value is never re-typed. Alternative: a literal text string |
+| H-23 | LEAD SOURCE (DISTINCT) | Leave blank. Candidate rule if you want one: the second-level detail, i.e. the Seller-FB-Page boosting choice (AI) or the *Others* specify text, as the existing team sheets do |
+| H-24 | Plausible but misspelled e-mail domains | Warning `SUSPECT_EMAIL_DOMAIN` when the domain is within edit distance 1–2 of a configured list (gmail.com, yahoo.com, …) and is not on it |
+| H-25 | Leading and trailing whitespace | Trim, and log `WHITESPACE_TRIMMED` (INFO). Inner spacing is untouched |
+| H-26 | Records with these flags | Every listed flag sends the record to review **with its values unchanged**. This supersedes H-13 for `INVALID_EMAIL`, `SUSPECT_EMAIL_DOMAIN` and `MOBILE_FORMAT` |
+| H-27 | Export the Leads Log view? | Optional per-team export with the exact 17 headers. Off by default |
