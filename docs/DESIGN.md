@@ -1,11 +1,11 @@
-# FUEL Response Parser — Design Specification (v0.3, for approval)
+# FUEL Response Parser — Design Specification (v0.4, for approval)
 
 | Item | Value |
 |---|---|
 | Phase | DESIGN (no production code) |
 | Source analysed | `FUEL RESP (CSP-AD MARF) v3.3.xlsx` (Google Forms response export) |
 | Destination analysed | `FUEL (MGM-AD ADMIN) (2).xlsx` → sheet `MASTERLIST` (Microsoft Forms export) |
-| Status | **v0.3: data-handling rules approved (see the decision register in H). Blocked on H-1, H-2, H-6, H-7, H-8** |
+| Status | **v0.4: all data-handling rules approved. BUILD is blocked until H-2 (team → slot), H-6 (`Question`), H-28 (leader labels) and the H-1 directory review are verified** |
 
 > This document contains structure, counts and rules only. It holds no client records, phone numbers or e-mail addresses. Both workbooks were opened read-only, and neither was modified.
 
@@ -500,14 +500,14 @@ every source row       appears exactly once in RowLog
 
 | # | Topic | Status |
 |---|---|---|
-| H-1 | Seller e-mail source | **OPEN: blocking** |
-| H-2 | Team → seller slot mapping | **OPEN: blocking** (rule approved: the slot comes from SALES LEADER via verified config; a mismatch is flagged, never moved. The table itself is not yet verified) |
-| H-3 | Destination Email / Name | Proposed default, awaiting your confirmation |
-| H-4 | Start time | Proposed default, awaiting your confirmation |
-| H-5 | Id sequence | Proposed default, awaiting your confirmation |
-| H-6 | Meaning of `Question` / `Question1` | **OPEN: blocking** |
-| H-7 | v1 → v2 lead-source translation | **OPEN: blocking** |
-| H-8 | "Others, please specify" text | **OPEN: blocking** |
+| H-1 | Seller e-mail source | **Approved: option (b).** A directory with submitter fallback and a mismatch warning. The **draft directory is under review** (J.1). It is not used until reviewed |
+| H-2 | Team → seller slot mapping | **OPEN: blocking.** Rule approved. Sample-confirmed only: `TEAM CALOY` → G/H, `TEAM HD` → I/J. The six source teams are **unverified** (J.2) |
+| H-3 | Destination Email / Name | **Approved**: Email = submitter e-mail. Name blank |
+| H-4 | Start time | **Approved**: copy of the source Timestamp |
+| H-5 | Id sequence | **Approved**: continue from the last Id you enter from the live MASTERLIST |
+| H-6 | Meaning of `Question` / `Question1` | **Split.** `Question1` = Showroom Walk-In detail: **approved**. `Question` = **OPEN: blocking**, mapped to nothing until verified against the MS Form (J.3) |
+| H-7 | v1 → v2 lead-source translation | **Approved** for the four translations in J.4. `Referral` and `Site Walk-in` stay **OPEN**, and those records go to Review (`UNMAPPED_VALUE`, ERROR) |
+| H-8 | "Others, please specify" text | **Approved: option (a)**, appended to REMARKS with the originating-question label (J.5) |
 | H-9 – H-12, H-14 – H-21 | Defaults | Accepted as recommended (no objection raised) |
 | H-13 | WARNING vs ERROR routing | **Approved**, refined by D.8: warnings export and are listed in Review, errors go to Review only |
 | X1 | SPECIFIC LEAD SOURCE from the paired detail column | **Approved** |
@@ -518,6 +518,7 @@ every source row       appears exactly once in RowLog
 | H-25 | Trim leading/trailing whitespace, logged | **Approved** |
 | H-26 | (v0.2 "every flag → review") | **Withdrawn**, replaced by the D.8 validation policy |
 | H-27 | 17-column Leads Log as an optional separate output | **Approved** |
+| H-28 | Source SALES LEADER labels vs the MS Form's SALES LEADER options | **OPEN: blocking** (new, J.2) |
 
 ### Blocking (the build needs an answer)
 
@@ -528,7 +529,7 @@ every source row       appears exactly once in RowLog
 | H-3 | Destination **Email** (D) / **Name** (E) | D = submitter e-mail, or `anonymous` like MS Forms. E blank | D = submitter e-mail (keeps the provenance), E blank. |
 | H-4 | **Start time** | Copy Timestamp, or leave blank | Copy Timestamp. MS Forms always fills it, and blank values may break the live sheet's formulas or sorting. |
 | H-5 | **Id** | (a) Continue from the last Id in the live MASTERLIST, entered by you · (b) Start at 1 · (c) Leave blank | **(a)**. The tool never reads or writes the live file, and you type the last Id. |
-| H-6 | Meaning of **`Question`** (Y) and **`Question1`** (AF) | Y = Corporate detail? AF = Showroom detail? | Please confirm from the MS Form. AF is supported by sample data; Y is inferred only from question order. |
+| H-6 *(see register)* | Meaning of **`Question`** (Y) and **`Question1`** (AF) | Y = Corporate detail? AF = Showroom detail? | Please confirm from the MS Form. AF is supported by sample data; Y is inferred only from question order. |
 | H-7 | **v1 → v2 lead-source translation** | `Ownsource`→`Own Source` · `Booth`→`Booth Manning` · `Digital`+`Seller Facebook Page`/`Facebook Marketplace`/`Tiktok Inquiry`→`Digital - Seller Social Media` · `Digital`+`Project's Main Page`→`Digital - Official Social Media` · `Referral` (Friend/Relative)→? · `Site Walk-in`→? | Approve the first four. `Referral` and `Site Walk-in` → review until you decide (Referral holds a relationship, not a buyer name, and may really be Own Source = Friend/Relative). |
 | H-8 | **"Others, please specify" text** (no destination column) | (a) Append to REMARKS as `[<Question> – Others] <text>` · (b) Write `Others: <text>` into the detail column · (c) Drop it (not recommended) | **(a)**. Lossless, and detail columns keep valid option values. |
 
@@ -633,6 +634,8 @@ MARF RAW ──transform──► MASTERLIST record (35) ──project──► 
 
 ### I.4 Fixture: five TEAM CALOY rows plus one slot-2 control
 
+**Privacy:** names and e-mails are shown as ‹placeholders›. The test suite rebuilds this fixture as a **synthetic** workbook that reproduces each value's *pattern* (comma in domain, trailing space, 10-digit mobile, and so on). The real sample rows are never committed.
+
 **Source:** the destination workbook's sample rows (Ids 6, 8, 9, 10, 11 = TEAM CALOY; Id 7 = TEAM HD as the slot-2 control). Ids 2–5 (`Option 1/2`) are form test entries and are excluded. *Assumption to confirm: these are the "five sample rows".*
 
 Expected output under the rules above (`∅` = blank):
@@ -679,7 +682,7 @@ Expected output under the rules above (`∅` = blank):
 | X3 | First name without a trailing space | The source value has a trailing space | **Resolved (H-25)**: trimmed, `WHITESPACE_TRIMMED` logged |
 | X4 | TIMESTAMP shown as `Oct/26/2026 17:38:01` | Equals **Completion time**, not Start time (17:35:38) | **Resolved (H-22)**: Completion time → datetime cell, `mmm/dd/yyyy hh:mm:ss` |
 | X5 | Showroom Walk-In example | Its detail sits only in the unnamed `Question1` column | Still open under H-6 until confirmed from the MS Form |
-| X6 | Malformed e-mails flagged | The `…@gmaol.com` address passes any syntax check | **Resolved (H-24)**: syntax only. not flagged (R16) |
+| X6 | Malformed e-mails flagged | The `…@gmaol.com` address passes any syntax check | **Resolved (H-24)**: syntax only. Not flagged (R16) |
 | X7 | — | The source's existing team-sheet formula leaves SPECIFIC blank for **all v2 Own Source rows** (the `If Own Source` column is missing from its ranges). It puts *Others* texts and the Seller-FB-Page boosting choice in DISTINCT | The team sheets cannot be a fully trusted comparison. They are compared case-insensitively, except SPECIFIC/DISTINCT |
 
 ### I.6 Decisions raised in v0.2 (status in the H register)
@@ -692,3 +695,130 @@ Expected output under the rules above (`∅` = blank):
 | H-25 | Leading and trailing whitespace | **Approved**: trim, log `WHITESPACE_TRIMMED` (INFO). Inner spacing untouched |
 | H-26 | Routing of flagged records | **Withdrawn**. Replaced by the D.8 validation policy (mobile and e-mail format issues are WARNINGs, not blocking) |
 | H-27 | Leads Log output | **Approved**: an optional, separate 17-column output for validation and comparison, with the exact headers. MASTERLIST (35 columns) unchanged |
+
+
+---
+
+## J. Verification Evidence and Approved Rules — v0.4 addendum
+
+### J.1 Seller directory (H-1): draft for review
+
+**How the draft was built.** For each distinct `Seller Name` in `MARF RAW`, the parser-to-be counts the submitting e-mails and proposes the most-used one. Each entry carries this evidence:
+
+| Column | Meaning |
+|---|---|
+| `proposed_email`, `share_pct` | Most-used submitting e-mail and its share of that seller's responses |
+| `proposed_email_matches_name` | Whether the e-mail's local part contains a token of the seller's name |
+| `other_emails`, `alt_email_matching_name` | Every other submitting e-mail with counts, and any that match the seller's name |
+| `email_also_used_for` | Other sellers submitted from the same account (e.g. a team leader submitting for members) |
+| `teams`, `last_used` | Context for the reviewer |
+| `review_flags` | `TIE`, `LOW_SHARE` (< 80%), `EMAIL_USED_FOR_OTHER_SELLERS`, `NAME_MISMATCH`, `BETTER_CANDIDATE_IN_ALTERNATES`, `FEW_RESPONSES`, `MULTIPLE_TEAMS` |
+| `status`, `reviewer_email`, `reviewer_note` | Filled in by the reviewer |
+
+**Result on v3.3:**
+- 30 sellers. 20 are `OK` (proposed e-mail has ≥ 80% share, matches the seller's name, and isn't shared).
+- 10 need a decision: 2 ties, 6 low-share, 5 accounts also used for other sellers, 2 name mismatches. Several entries carry more than one flag.
+
+**Privacy:** the draft holds real names and e-mails. It is delivered **outside the repository** for review. The real `config/sellers.yaml` is git-ignored, and only `config/sellers.example.yaml` (fake values) is committed.
+
+**Approval rule:**
+- The parser uses a directory row only when `status = APPROVED`.
+- A missing, unapproved or `REJECTED` row falls back to the submitter e-mail with `SELLER_EMAIL_FROM_SUBMITTER` (INFO).
+- When an approved directory e-mail differs from the submitter, the record gets `SUBMITTER_NOT_SELLER` (WARNING).
+- The directory's file hash is recorded in the audit Summary.
+
+### J.2 Team → seller slot (H-2) and leader labels (H-28)
+
+**Rule (approved):**
+- The slot comes only from a verified `teams.yaml` entry for the exact SALES LEADER label.
+- An unverified or unknown leader → `UNKNOWN_TEAM` (ERROR).
+- Expected slot empty but another slot filled → `SELLER_SLOT_MISMATCH` (ERROR). Nothing is ever moved between slots.
+
+**Evidence available today:**
+
+| SALES LEADER (source / destination) | In source | In destination sample | Slot evidence | Proposed slot | Status |
+|---|---|---|---|---|---|
+| `TEAM CALOY (AAD: …)` | no | yes (5 rows) | All 5 rows in G/H | 1 (G/H) | **Sample-confirmed**, still to be checked against the form |
+| `TEAM HD (AAD: …)` | no | yes (1 row) | Row in I/J | 2 (I/J) | **Sample-confirmed** (single row), still to be checked against the form |
+| `Option 1`, `Option 2` | no | yes (4 rows) | All in G/H | — | Placeholder options from form testing. Ignored |
+| `TEAM LESLIE (AAD: …)` | 1,023 | **no** | none | **none proposed** | UNVERIFIED |
+| `TEAM FERDINAND (AAD: …)` | 542 | **no** | none | **none proposed** | UNVERIFIED |
+| `TEAM BERNADETTE (AAD: …)` | 518 | **no** | none | **none proposed** | UNVERIFIED |
+| `AM: JESSA` | 442 | **no** | none | **none proposed** | UNVERIFIED |
+| `TEAM CHRISTINE (AAD: …)` | 380 | **no** | none | **none proposed** | UNVERIFIED |
+| `TEAM RALPH (AAD: …)` | 159 | **no** | none | **none proposed** | UNVERIFIED |
+
+**Why no slot is proposed for the six source teams:**
+- None of the six labels appears in the destination workbook.
+- The source block number tells us nothing about the destination: the source form has 13 blocks and the destination form has 3 slots, so sections must be shared across leaders.
+- This also raises **H-28**: the MS Form (an MGM-AD form) may not offer these CSP-AD leaders as options at all, or may word them differently. The parser writes SALES LEADER verbatim (H-21), so a label the live MASTERLIST does not recognise would be structurally valid but wrong.
+
+**How to verify each mapping** (in order of authority):
+
+1. **Form editor (authoritative, read-only).** In Microsoft Forms, open the MGM-AD form → *…* → **Branching**, then:
+   - On the SALES LEADER question, note the "Go to" section for **every** option, and the exact option text (this answers H-28 too).
+   - For each target section, note which seller question it contains. MS Forms exports repeated titles in **form order**, with a numeric suffix:
+
+     | Seller question in form order | Export columns | Slot |
+     |---|---|---|
+     | 1st `Seller Name` | `Seller Name` / `Seller's Email Address` | 1 (G/H) |
+     | 2nd | `Seller Name1` / `…Address1` | 2 (I/J) |
+     | 3rd | `Seller Name2` / `…Address2` | 3 (K/L) |
+
+   - Record the result in `teams.yaml` with `verified_by: form_branching` and the date.
+2. **Test submission (confirmation; only with your permission to submit to the live form).** Submit one response per SALES LEADER option with a clearly marked test client (e.g. surname `ZZTEST`). Export, check which slot columns filled, then delete the test responses.
+3. **Live data cross-check (supporting).** Optionally provide a read-only copy of the live MASTERLIST. A pre-flight report then counts SALES LEADER × filled slot. Every leader must appear in exactly one slot. Any leader in two slots is a contradiction to resolve before import.
+
+`teams.yaml` entries carry `slot`, `destination_label`, `verified_by` (`form_branching` | `test_submission` | `sample_only`) and `verified_on`. A **build-time gate** refuses to export any record whose leader entry is not `form_branching` or `test_submission`. Sample-only entries (CALOY, HD) are used in tests but are not exportable until verified.
+
+### J.3 `Question` (H-6)
+
+- `Question1` → Showroom Walk-In detail: **approved** (supported by both sample rows with Lead Source `Showroom Walk-In`).
+- `Question` → **unmapped** until verified. No source value is written to column Y. If the source has a non-empty value that would have gone there (the `If Corporate, please choose below:` column, currently empty for all 3,064 responses), the record gets `UNMAPPED_COLUMN` and goes to Review.
+- **How to verify:** in the form editor, find the question between "Name of existing buyer who referred the client to you" and "If Digital - Official Social Media". MS Forms exports untitled or duplicate-titled questions as `Question`, `Question1`, … in form order. Note its type, options and which Lead Source option branches to it. If it is the Corporate detail, the mapping in C row 25 is activated as written.
+
+### J.4 Legacy lead-source translation (H-7, approved)
+
+| v1 `Lead Source` | v1 detail condition | → v2 `Lead Source` | Detail written to |
+|---|---|---|---|
+| `Ownsource` | any | `Own Source` | AB (from v1 `Own Source`) |
+| `Booth` | any | `Booth Manning` | W (from v1 booth location, verbatim) |
+| `Digital` | `Digital` ∈ {`Seller Facebook Page`, `Facebook Marketplace`, `Tiktok Inquiry`} | `Digital - Seller Social Media` | AA (the v1 `Digital` value, verbatim) |
+| `Digital` | `Digital` = `Project's Main Page` | `Digital - Official Social Media` | Z (verbatim) |
+| `Digital` | any other value (e.g. `Others`) | — | Review, `UNMAPPED_VALUE` |
+| `Referral` | — | **open** | Review, `UNMAPPED_VALUE` (ERROR) |
+| `Site Walk-in` | — | **open** | Review, `UNMAPPED_VALUE` (ERROR) |
+
+- Translated records keep their original v1 value in the audit RowLog (`lead_source_original`).
+- Detail values are not translated, only placed. Any value-level mapping (e.g. `Facebook Marketplace` vs `Seller Facebook Marketplace Post`) still needs separate approval under H-10.
+- Expected effect on v3.3: about 20 `Referral` and 1 `Site Walk-in` responses held in Review.
+
+### J.5 "Others, please specify" text (H-8, approved)
+
+Format, appended to REMARKS: `[<label> – Others] <text>`. Several entries, and any existing remark, are joined with ` | ` in a fixed order: original REMARKS first, then the table order below. The original text is never edited, only trimmed (H-25).
+
+| Source column (resolved by occurrence + co-occurrence, C) | Label |
+|---|---|
+| v2 `If Others, please specify below` (after Corporate) | `Corporate` |
+| v2 `…below 2` | `Digital - Seller Social Media` |
+| v2 `…below 3` | `Own Source` |
+| v2 `…below 4` | `Repeat Buyer` |
+| v2 `…below 5` | `Lead Source` |
+| v1 `If others, please specify` (after Own Source) | `Own Source` |
+| v1 `If others, please specify 2` | `Referral` |
+| v1 `If others, please specify 3` | `Digital` |
+| v1 `If Others, please specify project` | `Repeat Buyer` |
+| v1 `If others, please specify` (last) | `Lead Source` |
+
+- Example: `[Own Source – Others] <text>`.
+- If the parent answer is not `Others` (`ORPHAN_OTHERS_TEXT`, WARNING), the text is still appended, so nothing is lost.
+
+### J.6 Build gate
+
+BUILD may start once **all** of the following hold:
+1. H-2: every SALES LEADER that will be exported has a `teams.yaml` entry with `verified_by` ∈ {`form_branching`, `test_submission`}.
+2. H-28: each source leader label is confirmed as identical to a form option, or mapped to one.
+3. H-6: `Question` is verified, or you explicitly confirm that it stays unmapped (the build can proceed with Y always blank).
+4. H-1: the seller directory review is returned. Rows may stay unapproved; they fall back to the submitter e-mail.
+
+`Referral` / `Site Walk-in` (H-7) do not block the build. They stay in Review until decided.

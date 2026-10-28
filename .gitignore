@@ -3,3 +3,6 @@
 output/
 __pycache__/
 .venv/
+config/sellers.yaml
+config/teams.local.yaml
+*.csv
