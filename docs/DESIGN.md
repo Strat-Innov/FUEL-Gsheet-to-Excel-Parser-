@@ -521,6 +521,7 @@ every source row       appears exactly once in RowLog
 | H-28 | SALES LEADER label written to the destination | **Approved (B2):** source label verbatim, unless an explicit label mapping is approved in `teams.yaml` |
 | H-29 | Access model: user-provided `.xlsx`/`.csv` exports only | **Approved** (Section M) |
 | H-30 | Mapping status model (`VERIFIED` / `OWNER_APPROVED_UNVERIFIED` / `UNRESOLVED`) | **Approved** (N.1) |
+| H-31 | Vercel deployment | **Approved (2026-10-28):** Vercel serves a static, read-only information page only (`api/index.py`, routed by `vercel.json`). No upload, no processing, no import of `fuel_parser`; all parsing stays local (H-29). A hosted parser would need a separate design change |
 
 ### Blocking (the build needs an answer)
 

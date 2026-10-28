@@ -96,6 +96,11 @@ Synthetic fixtures only. To also run the golden checks against the real export, 
 FUEL_GOLDEN_SOURCE="/path/FUEL RESP (CSP-AD MARF) v3.3.xlsx" FUEL_GOLDEN_TEMPLATE="/path/FUEL (MGM-AD ADMIN) (2).xlsx" .venv/bin/pytest
 ```
 
+## Vercel
+
+The Vercel project deploys only a static information page (`api/index.py`, `vercel.json`). It accepts no files and runs
+no parsing: all processing stays on your computer.
+
 ## Privacy
 
 Real workbooks, outputs, the ledger, the seller directory and saved profiles are git-ignored. Never commit them. The

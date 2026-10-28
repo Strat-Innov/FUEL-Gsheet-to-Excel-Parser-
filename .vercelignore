@@ -1,0 +1,11 @@
+# Only the static info page is deployed (H-31). Never upload data, outputs or local tooling.
+*.xlsx
+*.xls
+*.csv
+*.sqlite
+output/
+profiles/
+.venv/
+tests/
+config/sellers.yaml
+config/sellers.csv
