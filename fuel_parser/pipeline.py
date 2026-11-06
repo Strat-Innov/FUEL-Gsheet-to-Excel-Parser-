@@ -273,6 +273,10 @@ def run(opts: RunOptions) -> RunResult:
             records.extend(recs)
             response_issues.extend(issues)
 
+    for rec in records:  # a seller pair the template has no columns for would be lost: hold the record (H-36)
+        if rec.seller_slot and rec.seller_slot not in layout.slots:
+            rec.add("SELLER_SLOT_NOT_IN_TEMPLATE", cfg.policy.sev("SELLER_SLOT_NOT_IN_TEMPLATE"), "sales_leader",
+                    f"Seller pair {rec.seller_slot} is not in the MASTERLIST template")
     _dedupe(records, cfg, ledger)
     for rec in records:
         _assign_status(rec, opts.team_filter)

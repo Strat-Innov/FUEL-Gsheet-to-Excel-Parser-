@@ -141,6 +141,8 @@ destination:
     - {field: sponsorship, width: 116.57, header: "If\u00a0Sponsorship Event, please specify below the\u00a0name and date\u00a0of event\u00a0(e.g. Cardiologist Conference 2026 - January 1, 2026)\n\n"}
     - {field: awareness, width: 126.57, header: "Source of Awareness\nCLIENT'S PERSPECTIVE:\u00a0please choose the applicable source of awareness below\u00a0(you may choose more than one)\n"}
     - {field: seller_fb_page, width: 44.43, header: "\nIf Digital -\u00a0Seller Facebook Page,\u00a0please choose below:"}
+  # A supplied template must contain at least these fields and one complete seller pair (H-36).
+  template_required: [sales_leader, surname, first_name, lead_source]
   datetime_columns: [start_time, completion_time]
   datetime_format: "m/d/yy h:mm"
 

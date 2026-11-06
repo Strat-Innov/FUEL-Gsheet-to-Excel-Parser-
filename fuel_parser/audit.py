@@ -98,6 +98,9 @@ def write_audit(path: Path, result: "RunResult", opts: "RunOptions") -> None:
         ["MASTERLIST layout", "Built-in 35-column layout" if result.layout.origin == "built-in" else
          f"Template {result.layout.origin}" + (" (columns re-arranged; output follows the template)" if result.layout.reordered else "")],
         ["Template sha256", file_sha256(opts.template) if opts.template else "(none: built-in layout)"],
+        ["Output columns", f"{len(result.layout.headers)} (sheet '{result.layout.sheet_title}')"],
+        ["Fields not in the template (not exported)", ", ".join(result.layout.missing) or "(none)"],
+        ["Unrecognised template columns (left blank)", ", ".join(result.layout.unknown) or "(none)"],
         ["Mapping profile sha256", cfg.profile.sha256],
         ["Header signature(s)", ", ".join(f.cmap.signature for f in result.sources)],
         ["Vocabulary sha256", cfg.vocab.sha256],

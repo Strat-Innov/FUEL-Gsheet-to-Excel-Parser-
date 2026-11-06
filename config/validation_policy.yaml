@@ -5,6 +5,7 @@ codes:
   SLOT_UNRESOLVED: {severity: ERROR, action: "Add a VERIFIED or OWNER_APPROVED_UNVERIFIED entry for this SALES LEADER in config/teams.yaml, then re-run."}
   SLOT_OWNER_APPROVED_UNVERIFIED: {severity: WARNING, action: "Exported under an owner-approved, unverified slot assumption. Confirm when evidence is available."}
   SELLER_SLOT_MISMATCH: {severity: ERROR, action: "Seller data is in a different slot than configured for this SALES LEADER. Check the team mapping; values were not moved."}
+  SELLER_SLOT_NOT_IN_TEMPLATE: {severity: ERROR, action: "The MASTERLIST template has no column for the seller pair assigned to this team. Assign a seller pair the template has, or use a template with that pair."}
   SELLER_NAME_MISSING: {severity: ERROR, action: "Add the seller name in the source export or exclude the response."}
   CLIENT_NAME_MISSING: {severity: ERROR, action: "Client surname or first name is blank. Correct the export."}
   SELLER_EMAIL_MISSING: {severity: WARNING, action: "No seller e-mail available. Add the seller to the seller directory."}

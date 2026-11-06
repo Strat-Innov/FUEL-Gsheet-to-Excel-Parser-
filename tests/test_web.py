@@ -102,5 +102,6 @@ def test_classify_reads_headers_not_names(tmp_path):
     assert got["Sales FUEL Template.xlsx"]["kind"] == "source"
     assert got["responses.xlsx"]["kind"] == "template" and got["responses.xlsx"]["template_exact"]
     assert got["renamed.xlsx"]["template_sheet"] == "Sheet1" and got["renamed.xlsx"]["template_exact"]
-    assert got["almost.xlsx"]["kind"] == "template" and not got["almost.xlsx"]["template_exact"]
+    assert got["almost.xlsx"]["template_exact"] and got["almost.xlsx"]["template_unknown"] == ["changed"]
+    assert got["almost.xlsx"]["template_missing"]  # the replaced header's field is reported as not in the template
     assert got["dir.csv"]["kind"] == "sellers"

@@ -364,10 +364,10 @@ def test_T39_team_sheets_only_is_rejected(env):
         env.run(p)
 
 
-def test_T43_altered_template_stops_before_output(env):
+def test_T43_template_without_essentials_stops_before_output(env):
     from .fixtures.builders import write_template
-    bad = write_template(env.root / "bad.xlsx", TEMPLATE_HEADERS[:-1] + ["Changed"])
-    with pytest.raises(TemplateError):
+    bad = write_template(env.root / "bad.xlsx", [h for h in TEMPLATE_HEADERS if h != "Lead Source"])
+    with pytest.raises(TemplateError, match="missing Lead Source"):
         env.run(env.source([response()]), template=bad)
     assert not env.out.exists() or not any(env.out.glob("FUEL_*"))
 
@@ -474,10 +474,8 @@ def test_template_found_by_header_when_sheet_is_renamed(env):
     wb.save(p)
     r = env.run(env.source([response()]), template=p)
     out = openpyxl.load_workbook(r.outputs["import"])
-    assert out.sheetnames == ["MASTERLIST"] and [c.value for c in out["MASTERLIST"][1]] == TEMPLATE_HEADERS
+    assert out.sheetnames == ["Sheet1"] and [c.value for c in out["Sheet1"][1]] == TEMPLATE_HEADERS  # sheet name follows the template
 
-
-# -- H-34: built-in MASTERLIST layout, re-arranged templates ------------------------------------
 
 def test_builtin_layout_when_no_template(env):
     r = env.run(env.source([response()]), template=None)
@@ -495,7 +493,7 @@ def test_rearranged_template_drives_column_order(env):
     p = env.root / "rearranged.xlsx"
     wb.save(p)
     r = env.run(env.source([response()]), template=p)
-    ws = openpyxl.load_workbook(r.outputs["import"])["MASTERLIST"]
+    ws = openpyxl.load_workbook(r.outputs["import"])["Layout v2"]
     header = [c.value for c in ws[1]]
     assert header == order
     row = {h: c.value for h, c in zip(header, ws[2])}
@@ -503,16 +501,15 @@ def test_rearranged_template_drives_column_order(env):
     assert r.layout.reordered and "Layout v2" in r.layout.origin
 
 
-def test_template_with_missing_header_is_refused(env):
+def test_template_without_a_complete_seller_pair_is_refused(env):
+    drop = {"Seller's Email Address", "Seller's Email Address1", "Seller's Email Address2"}
     wb = openpyxl.Workbook()
-    wb.active.append(TEMPLATE_HEADERS[:-1])
-    p = env.root / "short.xlsx"
+    wb.active.append([h for h in TEMPLATE_HEADERS if h not in drop])
+    p = env.root / "no_pair.xlsx"
     wb.save(p)
-    with pytest.raises(TemplateError, match="missing 1 header"):
+    with pytest.raises(TemplateError, match="no complete Seller Name / Seller's Email Address pair"):
         env.run(env.source([response()]), template=p)
 
-
-# -- H-35: bulk import of several response exports ----------------------------------------------
 
 def test_bulk_import_combines_files(env):
     a = env.source([response(surname="Alpha1"), response(ts=datetime(2026, 6, 2), surname="Alpha2")], name="team_a.xlsx")
@@ -559,3 +556,50 @@ def test_no_output_left_behind_when_a_later_write_fails(env, monkeypatch):
         env.run(env.source([response()]))
     assert not list(env.out.glob("FUEL_*"))  # import file removed: nothing un-ledgered remains
     assert Ledger(env.ledger).imported_keys() == set()
+
+
+# -- H-36: the output follows the supplied template (subset, order, sheet name, style) ----------
+
+def _migration_style_template(path):
+    """Like the CSP Direct v4.0 migration template: 33 columns, no third seller pair, FB page moved, Sheet1."""
+    from openpyxl.styles import Font
+    drop = {"Seller Name2", "Seller's Email Address2"}
+    cols = [h for h in TEMPLATE_HEADERS if h not in drop]
+    fb = cols.pop(cols.index(TEMPLATE_HEADERS[34]))
+    cols.insert(cols.index(TEMPLATE_HEADERS[26]) + 1, fb)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Sheet1"
+    ws.append(cols + ["Internal Notes"])
+    ws.cell(1, 1).font = Font(bold=True, color="FF0000")
+    wb.save(path)
+    return cols
+
+
+def test_output_follows_a_subset_template_with_new_order_and_sheet_name(env):
+    cols = _migration_style_template(env.root / "migration.xlsx")
+    r = env.run(env.source([response(lead_source="Digital - Seller Social Media", digital_seller="Seller Facebook Page",
+                                     seller_fb_page="Facebook Page with Company's Boosting Budget")]),
+                template=env.root / "migration.xlsx")
+    out = openpyxl.load_workbook(r.outputs["import"])
+    assert out.sheetnames == ["Sheet1"]
+    ws = out["Sheet1"]
+    header = [c.value for c in ws[1]]
+    assert header == cols + ["Internal Notes"] and len(header) == 34
+    row = dict(zip(header, (c.value for c in ws[2])))
+    assert row[TEMPLATE_HEADERS[34]] == "Facebook Page with Company's Boosting Budget"  # moved column carries its value
+    assert row["Seller Name"] == "AS: Test Seller" and row["Internal Notes"] is None
+    assert ws.cell(1, 1).font.b and ws.cell(1, 1).font.color.rgb.endswith("FF0000")  # header style copied
+    assert r.layout.missing == ("seller_name_3", "seller_email_3") and r.layout.unknown == ("Internal Notes",)
+    summary = dict(row[:2] for row in openpyxl.load_workbook(r.outputs["audit"])["Summary"].iter_rows(values_only=True))
+    assert summary["Fields not in the template (not exported)"] == "seller_name_3, seller_email_3"
+    assert summary["Unrecognised template columns (left blank)"] == "Internal Notes"
+
+
+def test_team_assigned_to_a_pair_missing_from_the_template_is_held(env):
+    _migration_style_template(env.root / "migration.xlsx")
+    r = env.run(env.source([response(leader="TEAM DELTA (AAD: Q)"), response(ts=datetime(2026, 6, 2), surname="B")]),
+                template=env.root / "migration.xlsx")
+    delta, alpha = recs(r)
+    assert delta.status == RecordStatus.REVIEW and "SELLER_SLOT_NOT_IN_TEMPLATE" in codes(delta)
+    assert alpha.status == RecordStatus.EXPORTED and balanced(r)

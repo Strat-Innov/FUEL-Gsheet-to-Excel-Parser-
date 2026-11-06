@@ -156,10 +156,14 @@ function describe(role, file) {
     if (i.template_sheet) return ["err", "This is a MASTERLIST template, not a response export. Remove it (the layout is built in)."];
     return ["err", "No response sheet found (Timestamp, SALES LEADER, Lead Source, Seller Name). Remove this file or check it."];
   }
-  if (i.template_sheet && i.template_exact)
-    return ["ok", i.template_reordered ? `Template recognised · sheet “${i.template_sheet}” · columns re-arranged: the output will follow this template`
-                                       : `Template recognised · sheet “${i.template_sheet}” · same arrangement as the built-in layout`];
-  if (i.template_sheet) return ["err", `Sheet “${i.template_sheet}” is missing ${i.template_missing} of the 35 MASTERLIST headers or has extra ones. Use the built-in layout or a complete template.`];
+  if (i.template_sheet && i.template_exact) {
+    const base = `Template recognised · sheet “${i.template_sheet}” · ${i.template_columns} columns · the output follows this template's columns, order and sheet name`;
+    const notes = [];
+    if (i.template_missing.length) notes.push(`not in this template (not exported): ${i.template_missing.join(", ")}`);
+    if (i.template_unknown.length) notes.push(`unrecognised columns (left blank): ${i.template_unknown.join(", ")}`);
+    return [notes.length ? "warn" : "ok", base + (notes.length ? ". Note — " + notes.join("; ") + "." : "")];
+  }
+  if (i.template_sheet) return ["err", i.template_error || "This template cannot be used."];
   if (i.source_sheet) return ["err", "This is a response export, not a template. Add it to Response exports instead."];
   return ["err", "No MASTERLIST header found in any sheet."];
 }
@@ -178,7 +182,7 @@ function renderFiles() {
   const trow = document.querySelector(".file-row[data-role=template]");
   const t = state.files.template;
   trow.querySelector(".fname").textContent = t ? `${t.name} · ${(t.buffer.byteLength / 1024).toFixed(0)} KB` : "Built-in MASTERLIST layout · 35 fixed columns";
-  const [tcls, ttext] = t ? describe("template", t) : ["ok", "No template file needed. Add one only if the MASTERLIST columns were re-arranged."];
+  const [tcls, ttext] = t ? describe("template", t) : ["ok", "No template file needed. Add one to make the output follow its columns, order and sheet name."];
   trow.querySelector(".fnote").className = "fnote " + tcls;
   trow.querySelector(".fnote").textContent = ttext;
   trow.querySelector(".remove").classList.toggle("hidden", !t);
@@ -271,7 +275,8 @@ function renderSummary() {
   const files = r.sources.map((s) => `${s.name} (sheet “${s.sheet}”, ${fmt(s.responses)} responses` +
     (s.ignored.length ? `, ${s.ignored.length} other sheet${s.ignored.length > 1 ? "s" : ""} ignored)` : ")")).join(" · ");
   $("#headline").textContent = `${r.sources.length} response export${r.sources.length > 1 ? "s" : ""}: ${files}. ` +
-    `MASTERLIST layout: ${r.layout.origin === "built-in" ? "built-in" : r.layout.origin + (r.layout.reordered ? " (re-arranged)" : "")}. ` +
+    `MASTERLIST layout: ${r.layout.origin === "built-in" ? "built-in" : `${r.layout.origin}, ${r.layout.columns} columns`}` +
+    (r.layout.missing.length ? ` (not in template: ${r.layout.missing.join(", ")})` : "") + ". " +
     `Exported: ${fmt(r.exported_verified)} verified · ${fmt(r.exported_owner_approved)} owner-approved (not verified).` +
     (r.previous_batches.length ? ` Some of these files were exported before (${r.previous_batches.map((b) => b.batch_id).join(", ")}).` : "");
   const tb = $("#issues");
@@ -292,8 +297,15 @@ function renderTeams() {
     const locked = t.status === "VERIFIED";
     const applied = state.assignments[t.key];
     const sel = el("select", { "data-key": t.key });
-    [["", "Unresolved — keep in review"], ["1", "G/H · Seller Name"], ["2", "I/J · Seller Name1"], ["3", "K/L · Seller Name2"]]
-      .forEach(([v, label]) => sel.append(el("option", { value: v, text: label })));
+    sel.append(el("option", { value: "", text: "Unresolved — keep in review" }));
+    // Only the seller pairs the MASTERLIST template has can be chosen (H-36).
+    const slots = state.result.layout.slots;
+    for (const n of [1, 2, 3]) {
+      const s = slots.find((x) => x.slot === n);
+      const opt = el("option", { value: String(n), text: s ? `${s.letters} · ${s.header}` : `Seller pair ${n} · not in this template` });
+      if (!s) opt.disabled = true;
+      if (s || (applied && applied.slot === n)) sel.append(opt);
+    }
     sel.value = locked ? String(t.slot) : String(applied ? applied.slot : "");
     sel.disabled = locked;
     sel.addEventListener("change", () => { state.pending[t.key] = sel.value ? Number(sel.value) : 0; markPending(); });

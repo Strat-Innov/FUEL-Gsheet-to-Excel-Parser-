@@ -79,6 +79,13 @@ def _leaders(result) -> list[dict]:
     return list(groups.values())
 
 
+def _readable(result, fields) -> list[str]:
+    from fuel_parser.writer import builtin_layout
+    base = builtin_layout(result.cfg.profile)
+    names = dict(zip(base.fields, base.headers))
+    return [" ".join(str(names.get(f, f)).split()) for f in fields]
+
+
 def _result(result) -> dict:
     cfg = result.cfg
     issues = Counter((i.code, i.severity.value) for r in result.records for i in r.issues)
@@ -109,7 +116,12 @@ def _result(result) -> dict:
         "sheet": result.sheet.sheet_name, "ignored_sheets": result.sheet.ignored_sheets,
         "sources": [{"name": f.name, "sheet": f.sheet.sheet_name, "responses": len(f.sheet.rows),
                      "ignored": f.sheet.ignored_sheets} for f in result.sources],
-        "layout": {"origin": result.layout.origin, "reordered": result.layout.reordered},
+        "layout": {"origin": result.layout.origin, "reordered": result.layout.reordered, "sheet": result.layout.sheet_title,
+                   "columns": len(result.layout.headers), "missing": _readable(result, result.layout.missing),
+                   "unknown": list(result.layout.unknown),
+                   "slots": [{"slot": n, "letters": result.layout.slot_letters(n),
+                              "header": " ".join(str(result.layout.headers[result.layout.fields.index(f"seller_name_{n}")]).split())}
+                             for n in result.layout.slots]},
     }
 
 
@@ -168,26 +180,18 @@ def classify(path: str) -> str:
 
     profile = load_profile(APP / "config" / "mapping_profile.yaml")
     src_keys = set(profile.source["signature_keys"])
-    tpl_keys = {"completion time", "client's surname", "seller name1", "lead source"}
-    builtin = [match_key(t["header"]) for t in profile.dest["template"]]
+    tpl_keys = {"sales leader", "client's surname", "lead source"}
     p = Path(path)
     found = {"source_sheet": None, "template_sheet": None, "template_exact": False, "template_reordered": False,
-             "template_missing": 0}
+             "template_columns": 0, "template_missing": [], "template_unknown": [], "template_slots": [], "template_error": ""}
 
     def inspect(name: str, header: list) -> None:
         found["_sheets"] = found.get("_sheets", 0) + 1
         keys = {match_key(h) for h in header}
         if src_keys <= keys and found["source_sheet"] is None:
             found["source_sheet"] = name
-        if tpl_keys <= keys:
-            while header and header[-1] is None:
-                header.pop()
-            got = [match_key(h) for h in header]
-            valid = sorted(got) == sorted(builtin)  # the 35 approved headers, in any order (H-34)
-            if found["template_sheet"] is None or (valid and not found["template_exact"]):
-                found["template_sheet"], found["template_exact"] = name, valid
-                found["template_reordered"] = valid and got != builtin
-                found["template_missing"] = len(set(builtin) - set(got))
+        if tpl_keys <= keys and "timestamp" not in keys and found["template_sheet"] is None:
+            found["template_sheet"] = name  # looks like a MASTERLIST header; validated below with the parser's rules
 
     try:
         if p.suffix.lower() == ".csv":
@@ -207,6 +211,18 @@ def classify(path: str) -> str:
     except Exception as e:  # unreadable file: report the type only, never content
         found.pop("_sheets", None)
         return json.dumps({"kind": "error", "message": type(e).__name__, **found, "other_sheets": 0})
+    if found["template_sheet"] and p.suffix.lower() != ".csv":
+        from fuel_parser.writer import TemplateError, builtin_layout, read_template_header
+        try:
+            layout = read_template_header(p, profile)  # exactly the rules the export uses (H-36)
+            names = dict(zip(builtin_layout(profile).fields, builtin_layout(profile).headers))
+            found.update(template_exact=True, template_sheet=layout.sheet_title, template_reordered=layout.reordered,
+                         template_columns=len(layout.headers),
+                         template_missing=[" ".join(str(names[f]).split()) for f in layout.missing],
+                         template_unknown=list(layout.unknown),
+                         template_slots=[{"slot": n, "letters": layout.slot_letters(n)} for n in layout.slots])
+        except TemplateError as e:
+            found["template_error"] = str(e)
     sheets_seen = found.pop("_sheets", 0)
     found["other_sheets"] = max(0, sheets_seen - 1) if found["source_sheet"] else 0
     kind = ("both" if found["source_sheet"] and found["template_sheet"] else "source" if found["source_sheet"]
